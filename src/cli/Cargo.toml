@@ -1,6 +1,6 @@
 [package]
 name = "qtcloud-media-cli"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 description = "量潮媒体云命令行工具：公众号排版与草稿箱直出"
 authors = ["QuantTide <opensource@quanttide.com>"]
