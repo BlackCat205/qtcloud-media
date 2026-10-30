@@ -43,3 +43,7 @@ qtcloud-media publish article.md --theme themes/default.toml \
 ## 主题
 
 主题是一个 TOML 文件，承载一整套排版参数（字号、行高、间距、标题、引用、代码、配色）。换主题不碰正文，见 `themes/default.toml`。
+
+## 技能
+
+`.agents/skills/qtcloud-media-wechat`：AI 助手用本 CLI 推公众号草稿箱的技能文件（OpenCode 等可识别 `.agents/skills/<name>/SKILL.md`）。
