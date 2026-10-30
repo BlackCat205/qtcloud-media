@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <script>
+    // 富文本复制：text/html 让粘贴进公众号编辑器时保留排版
+    function copyRichText(html, text) {
+      const item = new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([text], { type: "text/plain" })
+      });
+      return navigator.clipboard.write([item]);
+    }
+  </script>
   <!--
     If you are serving your web app in a path other than the root, change the
     href value below to reflect the base path you are serving from.

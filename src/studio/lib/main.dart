@@ -1,121 +1,150 @@
+import 'dart:async';
+import 'dart:js_interop';
+import 'dart:ui_web' as ui_web;
+
 import 'package:flutter/material.dart';
+import 'package:web/web.dart' as web;
+
+import 'md.dart';
+
+/// 把富文本写入剪贴板（见 web/index.html 中的同名 JS 函数）。
+/// text/html 让粘贴进公众号编辑器时保留排版；text/plain 作降级。
+@JS('copyRichText')
+external JSPromise copyRichText(String html, String text);
 
 void main() {
-  runApp(const MyApp());
+  runApp(const StudioApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+const sampleMarkdown = '''# 标题写在这里（不进正文）
 
-  // This widget is the root of your application.
+一条命令，把 Markdown 文章排好版，直接送进微信公众号草稿箱。
+
+## 小节
+
+正文段落，支持 **加粗**、*斜体*、`行内代码` 与 [链接](https://example.com)。
+
+- 列表项一
+- 列表项二
+
+```bash
+qtcloud-media render article.md --theme themes/default.toml -o article.html
+```
+
+> 引用一段话。
+
+写完点右上角「复制到公众号」，到公众号编辑器里直接粘贴即可。
+''';
+
+class StudioApp extends StatelessWidget {
+  const StudioApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: '量潮媒体云工作台',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF07C160)),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const StudioPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class StudioPage extends StatefulWidget {
+  const StudioPage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<StudioPage> createState() => _StudioPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _StudioPageState extends State<StudioPage> {
+  static const _viewType = 'qtcloud-preview';
+  late final web.HTMLIFrameElement _iframe;
+  final _controller = TextEditingController(text: sampleMarkdown);
+  Timer? _debounce;
+  String _html = '';
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  @override
+  void initState() {
+    super.initState();
+    _html = renderArticle(_controller.text);
+    _iframe = web.HTMLIFrameElement()
+      ..setAttribute(
+          'style', 'border:0;width:100%;height:100%;background:#ffffff;')
+      ..setAttribute('srcdoc', _previewDoc(_html));
+    ui_web.platformViewRegistry
+        .registerViewFactory(_viewType, (int viewId) => _iframe);
+    _controller.addListener(_onChanged);
+  }
+
+  void _onChanged() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      setState(() => _html = renderArticle(_controller.text));
+      _iframe.setAttribute('srcdoc', _previewDoc(_html));
     });
+  }
+
+  String _previewDoc(String html) =>
+      '<!doctype html><html><head><meta charset="utf-8"></head>'
+      '<body style="margin:16px;">$html</body></html>';
+
+  Future<void> _copy() async {
+    final text = _controller.text;
+    await copyRichText(_html, text).toDart;
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已复制。到公众号编辑器直接粘贴，排版会保留。')),
+    );
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('量潮媒体云工作台'),
+        actions: [
+          FilledButton.icon(
+            onPressed: _copy,
+            icon: const Icon(Icons.copy),
+            label: const Text('复制到公众号'),
+          ),
+          const SizedBox(width: 16),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: TextField(
+                controller: _controller,
+                maxLines: null,
+                expands: true,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Markdown',
+                ),
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
+              ),
             ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: HtmlElementView(viewType: _viewType),
+          ),
+        ],
       ),
     );
   }

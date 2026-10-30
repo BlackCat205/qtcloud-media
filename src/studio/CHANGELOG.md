@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### 新增
+
+- 单页工作台 MVP（Web）：Markdown 编辑 + 公众号排版实时预览（iframe）+ 富文本复制到剪贴板（text/html，粘贴进公众号编辑器保留排版）；`lib/md.dart` 内联样式转换与 CLI render 同规则
+- 单元测试：md 转换（H1 跳过、全内联样式、转义、正文不变）
+
 ## [0.0.1] - 2026-10-30
 
 ### 新增
