@@ -10,6 +10,8 @@ cargo install --path .
 
 ## 用法
 
+> 渲染产物为逐元素全内联样式：不含 `<style>` 块与 class（微信草稿箱会清洗这两者）。
+
 ```bash
 # 只排版：Markdown → 公众号草稿 HTML（不联网）
 qtcloud-media render article.md --theme themes/default.toml -o article.html
