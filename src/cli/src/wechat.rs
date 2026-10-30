@@ -73,7 +73,9 @@ impl Wechat {
     pub fn upload_image(&self, path: &Path) -> Result<String> {
         let bytes =
             std::fs::read(path).with_context(|| format!("读取图片失败：{}", path.display()))?;
-        let part = reqwest::blocking::multipart::Part::bytes(bytes).file_name(file_name(path)?);
+        let part = reqwest::blocking::multipart::Part::bytes(bytes)
+            .file_name(file_name(path)?)
+            .mime_str(image_mime(path))?;
         let form = reqwest::blocking::multipart::Form::new().part("media", part);
         let url = format!("{API}/cgi-bin/media/uploadimg?access_token={}", self.token);
         let body = self
@@ -99,7 +101,9 @@ impl Wechat {
     pub fn upload_thumb(&self, path: &Path) -> Result<String> {
         let bytes =
             std::fs::read(path).with_context(|| format!("读取封面图失败：{}", path.display()))?;
-        let part = reqwest::blocking::multipart::Part::bytes(bytes).file_name(file_name(path)?);
+        let part = reqwest::blocking::multipart::Part::bytes(bytes)
+            .file_name(file_name(path)?)
+            .mime_str(image_mime(path))?;
         let form = reqwest::blocking::multipart::Form::new().part("media", part);
         let url = format!(
             "{API}/cgi-bin/material/add_material?access_token={}&type=image",
@@ -124,26 +128,69 @@ impl Wechat {
     }
 
     /// 新增草稿，返回草稿 media_id。文章停在草稿箱，不群发。
+    ///
+    /// 微信侧偶发 40007（invalid media_id）瞬时错误：素材刚上传完立即建稿
+    /// 可能被拒。带退避重试三次（2s / 4s / 8s）。
     pub fn add_draft(&self, article: Article) -> Result<String> {
         let req = DraftRequest {
             articles: vec![article],
         };
         let url = format!("{API}/cgi-bin/draft/add?access_token={}", self.token);
-        let body = self
-            .client
-            .post(&url)
-            .json(&req)
-            .send()
-            .context("新增草稿失败（网络错误）")?
-            .text()
-            .context("读取草稿响应失败")?;
-        check_api_error(&body)?;
-        let parsed: serde_json::Value = serde_json::from_str(&body).context("解析草稿响应失败")?;
-        parsed
+        let backoff_secs = [2u64, 4, 8];
+        let mut last_transient = String::new();
+        for (attempt, wait) in backoff_secs.iter().enumerate() {
+            if *wait > 0 {
+                std::thread::sleep(std::time::Duration::from_secs(*wait));
+            }
+            let body = self
+                .client
+                .post(&url)
+                .json(&req)
+                .send()
+                .context("新增草稿失败（网络错误）")?
+                .text()
+                .context("读取草稿响应失败")?;
+            match draft_result(&body) {
+                Ok(id) => return Ok(id),
+                Err(DraftError::Transient(msg)) => {
+                    eprintln!("建稿遇瞬时错误，重试 {}/3…（{}）", attempt + 1, msg);
+                    last_transient = msg;
+                }
+                Err(DraftError::Fatal(msg)) => bail!("{msg}"),
+            }
+        }
+        bail!("重试三次后建稿仍失败：{last_transient}")
+    }
+}
+
+enum DraftError {
+    /// 40007 等瞬时错误，隔片刻重试可恢复
+    Transient(String),
+    Fatal(String),
+}
+
+fn draft_result(body: &str) -> Result<String, DraftError> {
+    if let Ok(err) = serde_json::from_str::<ApiError>(body)
+        && let Some(code) = err.errcode
+        && code != 0
+    {
+        let msg = format!(
+            "微信接口返回错误：{} {}",
+            code,
+            err.errmsg.unwrap_or_default()
+        );
+        return match code {
+            40007 => Err(DraftError::Transient(msg)),
+            _ => Err(DraftError::Fatal(msg)),
+        };
+    }
+    match serde_json::from_str::<serde_json::Value>(body) {
+        Ok(v) => v
             .get("media_id")
-            .and_then(|v| v.as_str())
+            .and_then(|m| m.as_str())
             .map(str::to_owned)
-            .context("草稿响应缺少 media_id 字段")
+            .ok_or(DraftError::Fatal("草稿响应缺少 media_id 字段".into())),
+        Err(_) => Err(DraftError::Fatal("解析草稿响应失败".into())),
     }
 }
 
@@ -166,4 +213,20 @@ fn file_name(path: &Path) -> Result<String> {
         .and_then(|n| n.to_str())
         .map(str::to_owned)
         .context("非法文件名")
+}
+
+fn image_mime(path: &Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default()
+        .as_str()
+    {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        _ => "application/octet-stream",
+    }
 }
