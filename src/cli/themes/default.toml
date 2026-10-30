@@ -1,0 +1,29 @@
+# 量潮媒体云 CLI 默认主题
+# 主题 = 一整套可用排版。换主题不碰正文。
+
+name = "default"
+font_family = "-apple-system,BlinkMacSystemFont,'Helvetica Neue','PingFang SC','Microsoft YaHei',sans-serif"
+code_font_family = "SFMono-Regular,Menlo,Consolas,'Courier New',monospace"
+
+font_size = 16
+line_height = 1.8
+text_color = "#3f3f3f"
+paragraph_spacing = 16
+
+heading_color = "#1f2937"
+heading_weight = 600
+h2_size = 21
+h3_size = 18
+h4_size = 17
+heading_top_spacing = 28
+heading_bottom_spacing = 14
+
+quote_border_color = "#07c160"
+quote_bg = "#f6f8f7"
+quote_color = "#6a737d"
+
+code_bg = "#f6f8f7"
+code_color = "#c7254e"
+
+link_color = "#576b95"
+strong_color = "#1f2937"
