@@ -4,7 +4,7 @@
 
 ### 变更
 
-- 新增 `src/cli/.agents/skills/qtcloud-media-wechat`：推公众号草稿箱技能（对齐 qtcloud 主站的 `.agents/skills/<领域-名称>/SKILL.md` 注册方式）
+- 新增 `src/cli/skills/qtcloud-media-wechat`：推公众号草稿箱技能（SKILL.md）
 - render：开头 H1 不再进正文（标题由草稿 title 字段承载，人工改稿实测确认）
 
 ## [0.1.0] - 2026-10-30

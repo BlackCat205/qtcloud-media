@@ -46,4 +46,4 @@ qtcloud-media publish article.md --theme themes/default.toml \
 
 ## 技能
 
-`.agents/skills/qtcloud-media-wechat`：AI 助手用本 CLI 推公众号草稿箱的技能文件（OpenCode 等可识别 `.agents/skills/<name>/SKILL.md`）。
+`skills/qtcloud-media-wechat`：AI 助手用本 CLI 推公众号草稿箱的技能文件（SKILL.md）。
