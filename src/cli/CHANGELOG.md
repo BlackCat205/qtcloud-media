@@ -4,6 +4,7 @@
 
 ### 变更
 
+- 新增 `skills` 命令组（list / install）：技能文件经 agent-skills-rs 编译期内嵌，`skills install` 装到本机 agent 技能目录（缺省 ~/.agents/skills）
 - 新增 `src/cli/skills/qtcloud-media-wechat`：推公众号草稿箱技能（SKILL.md）
 - render：开头 H1 不再进正文（标题由草稿 title 字段承载，人工改稿实测确认）
 

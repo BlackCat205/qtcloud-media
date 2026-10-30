@@ -31,6 +31,19 @@ qtcloud-media publish article.md --theme themes/default.toml \
 
 文章停在**草稿箱**，不会自动群发；到公众号后台确认后手动群发。
 
+### 技能管理
+
+技能文件编译期内嵌进二进制，随 `cargo install` 带到任何机器：
+
+```bash
+# 列出内嵌技能
+qtcloud-media skills list
+
+# 安装到本机 agent 技能目录（缺省 ~/.agents/skills）
+qtcloud-media skills install              # 全部
+qtcloud-media skills install qtcloud-media-wechat --dir /path/to/skills
+```
+
 ## 凭证
 
 | 环境变量 | 说明 |
