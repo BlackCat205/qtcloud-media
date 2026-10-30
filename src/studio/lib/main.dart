@@ -9,6 +9,10 @@ import 'md.dart';
 import 'preview.dart'
     if (dart.library.js_interop) 'preview_web.dart'
     if (dart.library.io) 'preview_desktop.dart';
+import 'theme.dart';
+import 'theme_loader.dart'
+    if (dart.library.js_interop) 'theme_loader_web.dart'
+    if (dart.library.io) 'theme_loader_io.dart';
 
 void main() {
   runApp(const StudioApp());
@@ -61,6 +65,7 @@ class _StudioPageState extends State<StudioPage> {
   final _controller = TextEditingController(text: sampleMarkdown);
   Timer? _debounce;
   List<Block> _blocks = const [];
+  ThemeStyles _theme = const ThemeStyles();
   String _html = '';
 
   @override
@@ -68,11 +73,23 @@ class _StudioPageState extends State<StudioPage> {
     super.initState();
     _reparse();
     _controller.addListener(_onChanged);
+    _loadTheme();
+  }
+
+  /// 主题：桌面端读 XDG（~/.local/share|~/.config/qtcloud-media/themes/），
+  /// 没有再回退内置默认；Web 端直接内置默认。
+  Future<void> _loadTheme() async {
+    final theme = await loadThemeStyles();
+    if (!mounted) return;
+    setState(() {
+      _theme = theme;
+      _reparse();
+    });
   }
 
   void _reparse() {
     _blocks = parseMarkdown(_controller.text);
-    _html = renderArticle(_controller.text);
+    _html = articleHtml(_blocks, _theme);
   }
 
   void _onChanged() {
@@ -132,7 +149,7 @@ class _StudioPageState extends State<StudioPage> {
           ),
           const VerticalDivider(width: 1),
           Expanded(
-            child: ClipRect(child: buildPreview(_blocks)),
+            child: ClipRect(child: buildPreview(_blocks, _theme)),
           ),
         ],
       ),

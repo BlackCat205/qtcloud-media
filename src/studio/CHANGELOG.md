@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### 新增
+
+- 主题参数化：样式统一由 `lib/theme.dart`（与 CLI theme.rs 同字段的扁平 TOML）驱动，Web/桌面预览与复制同步生效
+- XDG 共享：`lib/paths_io.dart` 与 CLI `paths.rs` 同一规则；启动时读 `~/.local/share/qtcloud-media/themes/default.toml`（次选 config），找不到回退内置默认
+
 ## [0.1.0] - 2026-10-31
 
 ### 新增

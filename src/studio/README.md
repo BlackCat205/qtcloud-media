@@ -37,4 +37,4 @@ ln -sf ~/.local/opt/qtcloud-media-studio/qtcloud_media_studio ~/.local/bin/qtclo
 
 ## 与 CLI 的关系
 
-排版规则同源（同一套主题参数与内联策略）。发布（草稿箱直出）在 CLI，复制粘贴在工作台。
+排版规则同源；主题参数共用同一份 XDG 文件：启动时按 CLI 同一查找顺序读 `~/.local/share/qtcloud-media/themes/default.toml`（次选 `~/.config/...`），找不到回退内置默认（Web 端直接内置）。路径规则见 CLI 仓 `src/cli/src/paths.rs` 与本仓 `lib/paths_io.dart`——一字不差。发布（草稿箱直出）在 CLI，复制粘贴在工作台。

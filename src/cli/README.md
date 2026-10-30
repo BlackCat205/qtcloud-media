@@ -55,7 +55,15 @@ qtcloud-media skills install qtcloud-media-wechat --dir /path/to/skills
 
 ## 主题
 
-主题是一个 TOML 文件，承载一整套排版参数（字号、行高、间距、标题、引用、代码、配色）。换主题不碰正文，见 `themes/default.toml`。
+主题是一个扁平 TOML 文件，承载一整套排版参数（字号、行高、间距、标题、引用、代码、配色）。换主题不碰正文。`--theme` 既可以传文件路径，也可以传名称；传名称时按 XDG 顺序查找，CLI 与 studio 读同一份：
+
+| XDG 变量 | 路径 | 内容 |
+|---|---|---|
+| `XDG_DATA_HOME` | `~/.local/share/qtcloud-media/themes/<name>.toml` | 主题资产（首选） |
+| `XDG_CONFIG_HOME` | `~/.config/qtcloud-media/` | `secret.env`、`themes/`（次选） |
+| `XDG_CACHE_HOME` | `~/.cache/qtcloud-media/` | 预留缓存位 |
+
+环境变量不存在或为相对路径时回退家目录默认位置（与 studio 的 `paths_io.dart` 同一规则）。
 
 ## 技能
 

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qtcloud_media_studio/md.dart';
+import 'package:qtcloud_media_studio/theme.dart';
 
 void main() {
   test('开头 H1 不进正文，后续 H1 保留', () {
@@ -29,5 +30,18 @@ void main() {
   test('转义原始 HTML', () {
     final html = renderArticle('数学 < b > 公式\n');
     expect(html, contains('数学 &lt; b &gt; 公式'));
+  });
+
+  test('主题 TOML 解析与应用', () {
+    const toml = 'name = "night"\ntext_color = "#111111"\nh2_size = 24\nline_height = 2.0\n';
+    final t = ThemeStyles.fromToml(toml);
+    expect(t.textColor, '#111111');
+    expect(t.h2Size, 24);
+    expect(t.lineHeight, 2.0);
+    // 未写入的键回退内置默认
+    expect(t.codeColor, '#c7254e');
+    final html = articleHtml(parseMarkdown('## 小节\n'), t);
+    expect(html, contains('color:#111111'));
+    expect(html, contains('font-size:24px'));
   });
 }

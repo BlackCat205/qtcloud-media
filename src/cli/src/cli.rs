@@ -29,9 +29,9 @@ enum Cmd {
     Render {
         /// Markdown 文件
         markdown: PathBuf,
-        /// 主题文件（TOML），缺省用内置默认主题
+        /// 主题：文件路径或名称（名称按 XDG 查 `<data|config>/themes/<name>.toml`），缺省用内置默认主题
         #[arg(long)]
-        theme: Option<PathBuf>,
+        theme: Option<String>,
         /// 输出 HTML 文件，缺省打印到标准输出
         #[arg(short, long)]
         output: Option<PathBuf>,
@@ -40,9 +40,9 @@ enum Cmd {
     Publish {
         /// Markdown 文件
         markdown: PathBuf,
-        /// 主题文件（TOML），缺省用内置默认主题
+        /// 主题：文件路径或名称（名称按 XDG 查 `<data|config>/themes/<name>.toml`），缺省用内置默认主题
         #[arg(long)]
-        theme: Option<PathBuf>,
+        theme: Option<String>,
         /// 文章标题
         #[arg(long)]
         title: String,
@@ -175,11 +175,18 @@ fn embedded_skills() -> Vec<agent_skills_rs::Skill> {
     ]
 }
 
-fn render_file(markdown: &Path, theme: Option<&Path>) -> Result<String> {
+fn render_file(markdown: &Path, theme_spec: Option<&str>) -> Result<String> {
     let text = std::fs::read_to_string(markdown)
         .with_context(|| format!("读取 Markdown 失败：{}", markdown.display()))?;
-    let theme = match theme {
-        Some(path) => Theme::load(path)?,
+    let theme = match theme_spec {
+        Some(spec) => match crate::paths::resolve_theme(spec) {
+            Some(path) => Theme::load(&path)?,
+            None => bail!(
+                "找不到主题「{spec}」：既不是文件，也不在 {} 或 {} 的 themes/ 下",
+                crate::paths::data_dir().display(),
+                crate::paths::config_dir().display()
+            ),
+        },
         None => Theme::default(),
     };
     Ok(render::render(&text, &theme))

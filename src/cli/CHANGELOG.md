@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### 变更
+
+- XDG 共享：新增 `paths.rs`（config/data/cache 三目录，环境变量优先、相对路径视为未设置）；`--theme` 支持按名称查 `<data|config>/themes/<name>.toml`，与 studio 共用同一份主题文件
+
 ## [0.1.1] - 2026-10-31
 
 ### 变更

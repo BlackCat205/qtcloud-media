@@ -1,10 +1,12 @@
 /// Markdown 解析与公众号 HTML 渲染。
 ///
 /// 解析产物为块模型（[Block]），供两处消费：
-/// - [toHtml]：逐元素内联样式的公众号 HTML（与 CLI render 同规则：
-///   无 <style> 块、无 class、开头 H1 不进正文）
+/// - HTML 渲染（[blocksToHtml]）：逐元素内联样式，与 CLI render 同规则：
+///   无 <style> 块、无 class、开头 H1 不进正文
 /// - 桌面预览：按块模型直接构建 Flutter Widget（见 preview_desktop.dart）
 library;
+
+import 'theme.dart';
 
 // ── 块模型 ──────────────────────────────────────────────
 
@@ -221,90 +223,62 @@ List<Block> parseMarkdown(String markdown) {
   return blocks;
 }
 
-// ── HTML 渲染（逐元素内联样式）───────────────────────────
+// ── HTML 渲染（逐元素内联样式，样式随主题）──────────────────
 
-String escapeHtml(String s) => s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
+String escapeHtml(String s) =>
+    s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
 String escapeAttr(String s) => escapeHtml(s).replaceAll('"', '&quot;');
 
-const _wrapperStyle =
-    'font-family:-apple-system,BlinkMacSystemFont,\'Helvetica Neue\',\'PingFang SC\',\'Microsoft YaHei\',sans-serif;'
-    'font-size:16px;color:#3f3f3f;line-height:1.8;letter-spacing:0.2px;';
+String inlineToHtml(List<Inline> inlines, ThemeStyles t) => inlines
+    .map((run) => switch (run) {
+          TextRun(:final text) => escapeHtml(text),
+          CodeRun(:final text) =>
+            '<code style="${t.codeStyle}">${escapeHtml(text)}</code>',
+          StrongRun(:final children) =>
+            '<strong style="${t.strongStyle}">${inlineToHtml(children, t)}</strong>',
+          EmRun(:final children) =>
+            '<em style="${t.emStyle}">${inlineToHtml(children, t)}</em>',
+          DelRun(:final children) =>
+            '<del style="${t.delStyle}">${inlineToHtml(children, t)}</del>',
+          LinkRun(:final href, :final text) =>
+            '<a style="${t.linkStyle}" href="${escapeAttr(href)}">${escapeHtml(text)}</a>',
+          ImageInline(:final src, :final alt) =>
+            '<img style="${t.imgStyle}" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" />',
+        })
+    .join();
 
-const _pStyle = 'margin:0 0 16px;line-height:1.8;font-size:16px;text-align:justify;';
-const _h1Style =
-    'color:#1f2937;font-size:24px;font-weight:600;line-height:1.4;margin:28px 0 14px;';
-const _h2Style =
-    'color:#1f2937;font-size:21px;font-weight:600;line-height:1.4;margin:28px 0 14px;';
-const _h3Style =
-    'color:#1f2937;font-size:18px;font-weight:600;line-height:1.45;margin:28px 0 14px;';
-const _h4Style =
-    'color:#1f2937;font-size:17px;font-weight:600;line-height:1.45;margin:28px 0 14px;';
-const _quoteStyle =
-    'margin:0 0 16px;padding:12px 16px;border-left:3px solid #07c160;background:#f6f8f7;color:#6a737d;';
-const _quotePStyle = 'margin:0 0 8px;line-height:1.7;font-size:15px;';
-const _listStyle = 'margin:0 0 16px;padding-left:22px;';
-const _liStyle = 'margin:0 0 8px;line-height:1.8;';
-const _strongStyle = 'color:#1f2937;font-weight:700;';
-const _emStyle = 'font-style:italic;';
-const _delStyle = 'color:#9ca3af;text-decoration:line-through;';
-const _linkStyle = 'color:#576b95;text-decoration:none;';
-const _imgStyle = 'max-width:100%;height:auto;display:block;margin:0 auto 12px;';
-const _codeStyle =
-    'background:#f6f8f7;color:#c7254e;font-family:SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;padding:2px 5px;border-radius:4px;';
-const _preStyle =
-    'margin:0 0 16px;padding:14px 16px;background:#f6f8f7;border-radius:6px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;';
-const _preCodeStyle =
-    'background:none;color:#3f3f3f;font-family:SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;line-height:1.7;';
-const _hrStyle = 'border:none;border-top:1px solid #e5e7eb;margin:16px 0;';
-
-String inlineToHtml(List<Inline> inlines) => inlines.map((run) {
-      return switch (run) {
-        TextRun(:final text) => escapeHtml(text),
-        CodeRun(:final text) =>
-          '<code style="$_codeStyle">${escapeHtml(text)}</code>',
-        StrongRun(:final children) =>
-          '<strong style="$_strongStyle">${inlineToHtml(children)}</strong>',
-        EmRun(:final children) =>
-          '<em style="$_emStyle">${inlineToHtml(children)}</em>',
-        DelRun(:final children) =>
-          '<del style="$_delStyle">${inlineToHtml(children)}</del>',
-        LinkRun(:final href, :final text) =>
-          '<a style="$_linkStyle" href="${escapeAttr(href)}">${escapeHtml(text)}</a>',
-        ImageInline(:final src, :final alt) =>
-          '<img style="$_imgStyle" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" />',
-      };
-    }).join();
-
-String blockToHtml(Block block) {
+String blockToHtml(Block block, ThemeStyles t) {
   return switch (block) {
     HeadingBlock(:final level, :final inlines) => () {
-        final style = switch (level) {
-          1 => _h1Style,
-          2 => _h2Style,
-          3 => _h3Style,
-          _ => _h4Style,
+        final size = switch (level) {
+          1 => t.h1Size,
+          2 => t.h2Size,
+          3 => t.h3Size,
+          _ => t.h4Size,
         };
-        return '<h$level style="$style">${inlineToHtml(inlines)}</h$level>';
+        return '<h$level style="${t.headingStyle(size)}">${inlineToHtml(inlines, t)}</h$level>';
       }(),
     ParagraphBlock(:final inlines) =>
-      '<p style="$_pStyle">${inlineToHtml(inlines).replaceAll('\n', '<br/>')}</p>',
+      '<p style="${t.pStyle}">${inlineToHtml(inlines, t).replaceAll('\n', '<br/>')}</p>',
     QuoteBlock(:final paragraphs) =>
-      '<blockquote style="$_quoteStyle">${paragraphs.map((p) => '<p style="$_quotePStyle">${inlineToHtml(p.inlines)}</p>').join()}</blockquote>',
+      '<blockquote style="${t.quoteStyle}">${paragraphs.map((p) => '<p style="${t.quotePStyle}">${inlineToHtml(p.inlines, t)}</p>').join()}</blockquote>',
     CodeBlockText(:final text) =>
-      '<pre style="$_preStyle"><code style="$_preCodeStyle">${escapeHtml(text)}</code></pre>',
+      '<pre style="${t.preStyle}"><code style="${t.preCodeStyle}">${escapeHtml(text)}</code></pre>',
     ListBlock(:final ordered, :final items) =>
-      '<${ordered ? 'ol' : 'ul'} style="$_listStyle">${items.map((it) => '<li style="$_liStyle">${inlineToHtml(it)}</li>').join()}</${ordered ? 'ol' : 'ul'}>',
-    RuleBlock() => '<hr style="$_hrStyle" />',
+      '<${ordered ? 'ol' : 'ul'} style="${t.listStyle}">${items.map((it) => '<li style="${t.liStyle}">${inlineToHtml(it, t)}</li>').join()}</${ordered ? 'ol' : 'ul'}>',
+    RuleBlock() => '<hr style="${t.hrStyle}" />',
   };
 }
 
 /// 块列表 → 正文 HTML（不含外层 section）。
-String blocksToHtml(List<Block> blocks) => blocks.map(blockToHtml).join();
+String blocksToHtml(List<Block> blocks, ThemeStyles t) =>
+    blocks.map((b) => blockToHtml(b, t)).join();
 
-/// 渲染整篇文章为公众号草稿 content 片段。
+/// 块列表 → 完整文章片段（含外层 section）。
+String articleHtml(List<Block> blocks, ThemeStyles t) =>
+    '<section style="${t.wrapperStyle}">${blocksToHtml(blocks, t)}</section>';
+
+/// 渲染整篇文章为公众号草稿 content 片段（内置默认主题）。
 String renderArticle(String markdown) =>
-    '<section style="$_wrapperStyle">${blocksToHtml(parseMarkdown(markdown))}</section>';
+    articleHtml(parseMarkdown(markdown), ThemeStyles());
