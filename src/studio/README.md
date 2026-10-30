@@ -33,6 +33,8 @@ ln -sf ~/.local/opt/qtcloud-media-studio/qtcloud_media_studio ~/.local/bin/qtclo
 | `lib/md.dart` | Markdown → 块模型 → 公众号 HTML（逐元素内联样式） |
 | `lib/preview_*.dart` / `lib/copy_*.dart` | 平台条件导入：预览与富文本复制的两套实现 |
 | `lib/main.dart` | 单页工作台：编辑 + 预览 + 复制 |
+| `lib/drafts_io.dart` | 草稿读写：与 CLI 共用 `~/.local/state/qtcloud-media/drafts/`（打开/保存） |
+| `lib/theme.dart` | 主题参数（与 CLI theme.rs 同字段的扁平 TOML） |
 | `linux/runner/my_application.cc` | GTK 富文本剪贴板方法通道 |
 
 ## 与 CLI 的关系

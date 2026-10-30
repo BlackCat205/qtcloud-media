@@ -1,5 +1,6 @@
 //! 命令行入口：render（只排版）、publish（排版 + 推草稿箱）、skills（技能管理）。
 
+use crate::drafts::{self, DraftMeta};
 use crate::render;
 use crate::theme::Theme;
 use crate::wechat::{Article, Wechat};
@@ -27,8 +28,8 @@ struct Args {
 enum Cmd {
     /// Markdown → 公众号草稿 HTML（只排版，不联网）
     Render {
-        /// Markdown 文件
-        markdown: PathBuf,
+        /// Markdown 文件或草稿名
+        markdown: String,
         /// 主题：文件路径或名称（名称按 XDG 查 `<data|config>/themes/<name>.toml`），缺省用内置默认主题
         #[arg(long)]
         theme: Option<String>,
@@ -36,10 +37,10 @@ enum Cmd {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    /// Markdown → 排版 → 公众号草稿箱（不群发）
+    /// Markdown → 排版 → 公众号草稿箱（不群发；草稿名再次 publish 走更新）
     Publish {
-        /// Markdown 文件
-        markdown: PathBuf,
+        /// Markdown 文件或草稿名
+        markdown: String,
         /// 主题：文件路径或名称（名称按 XDG 查 `<data|config>/themes/<name>.toml`），缺省用内置默认主题
         #[arg(long)]
         theme: Option<String>,
@@ -64,6 +65,21 @@ enum Cmd {
         #[command(subcommand)]
         cmd: SkillsCmd,
     },
+    /// 草稿管理：CLI 与 studio 共用的接力工作区（XDG state）
+    Draft {
+        #[command(subcommand)]
+        cmd: DraftCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum DraftCmd {
+    /// 列出草稿（名称、标题、是否已推草稿箱）
+    List,
+    /// 新建草稿（生成正文骨架，可在 CLI 或 studio 中继续写）
+    New { name: String },
+    /// 查看草稿：正文路径与 meta 状态
+    Show { name: String },
 }
 
 #[derive(Subcommand)]
@@ -87,7 +103,8 @@ pub fn run() -> Result<()> {
             theme,
             output,
         } => {
-            let html = render_file(&markdown, theme.as_deref())?;
+            let input = drafts::resolve_input(&markdown)?;
+            let html = render_file(input.path(), theme.as_deref())?;
             match output {
                 Some(path) => {
                     std::fs::write(&path, &html)
@@ -107,26 +124,50 @@ pub fn run() -> Result<()> {
             author,
             source_url,
         } => {
-            let html = render_file(&markdown, theme.as_deref())?;
+            let input = drafts::resolve_input(&markdown)?;
+            let html = render_file(input.path(), theme.as_deref())?;
             let wechat = Wechat::authorize(&env_var(ENV_APP_ID)?, &env_var(ENV_APP_SECRET)?)?;
-            let html = inline_local_images(&html, &markdown, &wechat)?;
+            let html = inline_local_images(&html, input.path(), &wechat)?;
             let thumb_media_id = if thumb.starts_with("http") || Path::new(&thumb).is_file() {
                 wechat.upload_thumb(Path::new(&thumb))?
             } else {
-                thumb
+                thumb.clone()
             };
-            let draft_id = wechat.add_draft(Article {
-                title,
+            let article = Article {
+                title: title.clone(),
                 author,
-                digest,
+                digest: digest.clone(),
                 content: html,
                 content_source_url: source_url,
                 thumb_media_id,
                 need_open_comment: 0,
                 only_fans_can_comment: 0,
-            })?;
-            println!("已推入公众号草稿箱，media_id={draft_id}");
+            };
+            // 接力：草稿带 media_id 时更新同一篇，不新建
+            let existing = match &input {
+                drafts::Input::Draft { name, .. } => drafts::load_meta(name).media_id,
+                drafts::Input::File(_) => String::new(),
+            };
+            let (draft_id, action) = if existing.is_empty() {
+                (wechat.add_draft(article)?, "已推入")
+            } else {
+                (wechat.update_draft(&existing, article)?, "已更新")
+            };
+            println!("{action}公众号草稿箱，media_id={draft_id}");
             println!("注意：草稿不会自动群发，请到公众号后台确认后手动群发。");
+            if let drafts::Input::Draft { name, .. } = &input {
+                drafts::save_meta(
+                    name,
+                    &DraftMeta {
+                        title,
+                        digest,
+                        thumb,
+                        theme: theme.unwrap_or_default(),
+                        media_id: draft_id.clone(),
+                    },
+                )?;
+                println!("草稿状态已保存：{}", drafts::meta_path(name).display());
+            }
             Ok(())
         }
         Cmd::Skills { cmd } => match cmd {
@@ -162,6 +203,65 @@ pub fn run() -> Result<()> {
                 if installed == 0 {
                     bail!("没有匹配的技能：{}", name.unwrap_or_default());
                 }
+                Ok(())
+            }
+        },
+        Cmd::Draft { cmd } => match cmd {
+            DraftCmd::List => {
+                let names = drafts::list()?;
+                if names.is_empty() {
+                    println!("（暂无草稿，目录 {}）", drafts::drafts_dir().display());
+                }
+                for name in names {
+                    let meta = drafts::load_meta(&name);
+                    let state = if meta.media_id.is_empty() {
+                        "未推草稿箱"
+                    } else {
+                        "已推草稿箱"
+                    };
+                    println!("{name}\t{state}\t{}", meta.title);
+                }
+                Ok(())
+            }
+            DraftCmd::New { name } => {
+                let path = drafts::markdown_path(&name);
+                if path.exists() {
+                    bail!("草稿已存在：{}", path.display());
+                }
+                std::fs::create_dir_all(drafts::drafts_dir()).with_context(|| {
+                    format!("创建草稿目录失败：{}", drafts::drafts_dir().display())
+                })?;
+                std::fs::write(&path, format!("# {name}\n\n"))?;
+                println!("已新建草稿：{}", path.display());
+                println!("在 CLI 或 studio 里继续写，publish 时用草稿名「{name}」。");
+                Ok(())
+            }
+            DraftCmd::Show { name } => {
+                let path = drafts::markdown_path(&name);
+                if !path.exists() {
+                    bail!("草稿不存在：{}", path.display());
+                }
+                let meta = drafts::load_meta(&name);
+                println!("正文：{}", path.display());
+                println!("标题：{}", meta.title);
+                println!("摘要：{}", meta.digest);
+                println!(
+                    "主题：{}",
+                    if meta.theme.is_empty() {
+                        "（内置默认）"
+                    } else {
+                        &meta.theme
+                    }
+                );
+                println!("封面：{}", meta.thumb);
+                println!(
+                    "草稿箱 media_id：{}",
+                    if meta.media_id.is_empty() {
+                        "（未推过）"
+                    } else {
+                        &meta.media_id
+                    }
+                );
                 Ok(())
             }
         },

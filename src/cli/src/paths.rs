@@ -14,6 +14,11 @@ pub fn data_dir() -> PathBuf {
     base_dir("XDG_DATA_HOME", ".local/share").join("qtcloud-media")
 }
 
+/// 状态目录：`$XDG_STATE_HOME/qtcloud-media` → `~/.local/state/qtcloud-media`
+pub fn state_dir() -> PathBuf {
+    base_dir("XDG_STATE_HOME", ".local/state").join("qtcloud-media")
+}
+
 /// 缓存目录：`$XDG_CACHE_HOME/qtcloud-media` → `~/.cache/qtcloud-media`
 pub fn cache_dir() -> PathBuf {
     base_dir("XDG_CACHE_HOME", ".cache").join("qtcloud-media")

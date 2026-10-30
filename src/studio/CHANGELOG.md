@@ -4,6 +4,7 @@
 
 ### 新增
 
+- 草稿接力：`lib/drafts_io.dart` 与 CLI drafts.rs 共用 `~/.local/state/qtcloud-media/drafts/`；AppBar 新增打开草稿与保存（meta 由 CLI publish 维护，studio 只读正文）
 - 主题参数化：样式统一由 `lib/theme.dart`（与 CLI theme.rs 同字段的扁平 TOML）驱动，Web/桌面预览与复制同步生效
 - XDG 共享：`lib/paths_io.dart` 与 CLI `paths.rs` 同一规则；启动时读 `~/.local/share/qtcloud-media/themes/default.toml`（次选 config），找不到回退内置默认
 

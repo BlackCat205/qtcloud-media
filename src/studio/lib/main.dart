@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'copy.dart'
     if (dart.library.js_interop) 'copy_web.dart'
     if (dart.library.io) 'copy_desktop.dart';
+import 'drafts.dart'
+    if (dart.library.js_interop) 'drafts_web.dart'
+    if (dart.library.io) 'drafts_io.dart';
 import 'md.dart';
 import 'preview.dart'
     if (dart.library.js_interop) 'preview_web.dart'
@@ -67,6 +70,8 @@ class _StudioPageState extends State<StudioPage> {
   List<Block> _blocks = const [];
   ThemeStyles _theme = const ThemeStyles();
   String _html = '';
+  String? _draftName;
+  List<String> _draftNames = const [];
 
   @override
   void initState() {
@@ -74,6 +79,13 @@ class _StudioPageState extends State<StudioPage> {
     _reparse();
     _controller.addListener(_onChanged);
     _loadTheme();
+    _refreshDrafts();
+  }
+
+  Future<void> _refreshDrafts() async {
+    final names = await listDrafts();
+    if (!mounted) return;
+    setState(() => _draftNames = names);
   }
 
   /// 主题：桌面端读 XDG（~/.local/share|~/.config/qtcloud-media/themes/），
@@ -108,6 +120,54 @@ class _StudioPageState extends State<StudioPage> {
     );
   }
 
+  Future<void> _openDraft(String name) async {
+    final content = await readDraft(name);
+    if (!mounted) return;
+    if (content == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('草稿读取失败：$name')),
+      );
+      return;
+    }
+    setState(() {
+      _draftName = name;
+      _controller.text = content;
+      _reparse();
+    });
+  }
+
+  Future<void> _saveDraft() async {
+    var name = _draftName;
+    if (name == null) {
+      final controller = TextEditingController();
+      name = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('保存为草稿'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: '草稿名'),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context), child: const Text('取消')),
+            FilledButton(
+                onPressed: () => Navigator.pop(context, controller.text.trim()),
+                child: const Text('保存')),
+          ],
+        ),
+      );
+      if (name == null || name.isEmpty || !mounted) return;
+    }
+    await saveDraft(name, _controller.text);
+    if (!mounted) return;
+    setState(() => _draftName = name);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已保存草稿「$name」。CLI 用草稿名 publish 即可接力。')),
+    );
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
@@ -119,8 +179,27 @@ class _StudioPageState extends State<StudioPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('量潮媒体云工作台'),
+        title: Text(_draftName == null
+            ? '量潮媒体云工作台'
+            : '量潮媒体云工作台 · $_draftName'),
         actions: [
+          PopupMenuButton<String>(
+            tooltip: '打开草稿',
+            icon: const Icon(Icons.folder_open),
+            onSelected: _openDraft,
+            onOpened: _refreshDrafts,
+            itemBuilder: (context) => _draftNames.isEmpty
+                ? const [PopupMenuItem<String>(enabled: false, child: Text('（暂无草稿）'))]
+                : _draftNames
+                    .map((n) => PopupMenuItem(value: n, child: Text(n)))
+                    .toList(),
+          ),
+          IconButton(
+            tooltip: '保存草稿',
+            onPressed: _saveDraft,
+            icon: const Icon(Icons.save),
+          ),
+          const SizedBox(width: 4),
           FilledButton.icon(
             onPressed: _copy,
             icon: const Icon(Icons.copy),

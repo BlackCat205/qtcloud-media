@@ -161,6 +161,26 @@ impl Wechat {
         }
         bail!("重试三次后建稿仍失败：{last_transient}")
     }
+
+    /// 更新草稿箱中的同一篇草稿（接力场景：二次 publish 不新建）。
+    pub fn update_draft(&self, media_id: &str, article: Article) -> Result<String> {
+        let req = serde_json::json!({
+            "media_id": media_id,
+            "index": 0,
+            "articles": [article],
+        });
+        let url = format!("{API}/cgi-bin/draft/update?access_token={}", self.token);
+        let body = self
+            .client
+            .post(&url)
+            .json(&req)
+            .send()
+            .context("更新草稿失败（网络错误）")?
+            .text()
+            .context("读取草稿响应失败")?;
+        check_api_error(&body)?;
+        Ok(media_id.to_string())
+    }
 }
 
 enum DraftError {

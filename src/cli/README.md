@@ -31,6 +31,20 @@ qtcloud-media publish article.md --theme themes/default.toml \
 
 文章停在**草稿箱**，不会自动群发；到公众号后台确认后手动群发。
 
+### 草稿接力（CLI ↔ studio）
+
+草稿是 XDG 状态数据，与主题（资产）分开存放：`$XDG_STATE_HOME/qtcloud-media/drafts/`（回退 `~/.local/state/...`）。一个草稿两个文件：`<name>.md`（正文）+ `<name>.meta.json`（title/digest/thumb/theme/media_id，由 publish 维护）。
+
+```bash
+qtcloud-media draft new 我的文章          # 新建（studio 可直接打开继续写）
+qtcloud-media draft list                 # 名称、是否已推草稿箱、标题
+qtcloud-media draft show 我的文章         # 正文路径与 meta 状态
+qtcloud-media publish 我的文章 --title ... --thumb ...
+# 首次推入草稿箱；再次 publish 同名草稿走 draft/update 更新同一篇，不新建
+```
+
+`render` 的位置参数同样接受草稿名。正式要进 brochure/library 的定稿仍从草稿移入仓库，git 是正本。
+
 ### 技能管理
 
 技能文件编译期内嵌进二进制，随 `cargo install` 带到任何机器：

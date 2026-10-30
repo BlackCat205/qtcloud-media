@@ -4,6 +4,7 @@
 
 ### 变更
 
+- 草稿接力：新增 `drafts.rs`（`$XDG_STATE_HOME/.../drafts/`，`<name>.md` + `<name>.meta.json`）与 `draft` 命令组（list/new/show）；位置参数支持草稿名；publish 对带 media_id 的草稿走 `draft/update` 更新同一篇；微信客户端新增 `update_draft`
 - XDG 共享：新增 `paths.rs`（config/data/cache 三目录，环境变量优先、相对路径视为未设置）；`--theme` 支持按名称查 `<data|config>/themes/<name>.toml`，与 studio 共用同一份主题文件
 
 ## [0.1.1] - 2026-10-31

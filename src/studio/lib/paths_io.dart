@@ -14,4 +14,5 @@ Directory _base(String varName, List<String> fallbackParts) {
 
 Directory xdgConfigDir() => _base('XDG_CONFIG_HOME', ['.config']);
 Directory xdgDataDir() => _base('XDG_DATA_HOME', ['.local', 'share']);
+Directory xdgStateDir() => _base('XDG_STATE_HOME', ['.local', 'state']);
 Directory xdgCacheDir() => _base('XDG_CACHE_HOME', ['.cache']);
