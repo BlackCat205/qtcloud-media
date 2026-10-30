@@ -1,16 +1,14 @@
 import 'dart:async';
-import 'dart:js_interop';
-import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/material.dart';
-import 'package:web/web.dart' as web;
 
+import 'copy.dart'
+    if (dart.library.js_interop) 'copy_web.dart'
+    if (dart.library.io) 'copy_desktop.dart';
 import 'md.dart';
-
-/// 把富文本写入剪贴板（见 web/index.html 中的同名 JS 函数）。
-/// text/html 让粘贴进公众号编辑器时保留排版；text/plain 作降级。
-@JS('copyRichText')
-external JSPromise copyRichText(String html, String text);
+import 'preview.dart'
+    if (dart.library.js_interop) 'preview_web.dart'
+    if (dart.library.io) 'preview_desktop.dart';
 
 void main() {
   runApp(const StudioApp());
@@ -60,41 +58,33 @@ class StudioPage extends StatefulWidget {
 }
 
 class _StudioPageState extends State<StudioPage> {
-  static const _viewType = 'qtcloud-preview';
-  late final web.HTMLIFrameElement _iframe;
   final _controller = TextEditingController(text: sampleMarkdown);
   Timer? _debounce;
+  List<Block> _blocks = const [];
   String _html = '';
 
   @override
   void initState() {
     super.initState();
-    _html = renderArticle(_controller.text);
-    _iframe = web.HTMLIFrameElement()
-      ..setAttribute(
-          'style', 'border:0;width:100%;height:100%;background:#ffffff;')
-      ..setAttribute('srcdoc', _previewDoc(_html));
-    ui_web.platformViewRegistry
-        .registerViewFactory(_viewType, (int viewId) => _iframe);
+    _reparse();
     _controller.addListener(_onChanged);
+  }
+
+  void _reparse() {
+    _blocks = parseMarkdown(_controller.text);
+    _html = renderArticle(_controller.text);
   }
 
   void _onChanged() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;
-      setState(() => _html = renderArticle(_controller.text));
-      _iframe.setAttribute('srcdoc', _previewDoc(_html));
+      setState(_reparse);
     });
   }
 
-  String _previewDoc(String html) =>
-      '<!doctype html><html><head><meta charset="utf-8"></head>'
-      '<body style="margin:16px;">$html</body></html>';
-
   Future<void> _copy() async {
-    final text = _controller.text;
-    await copyRichText(_html, text).toDart;
+    await copyRich(_html, _controller.text);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('已复制。到公众号编辑器直接粘贴，排版会保留。')),
@@ -142,7 +132,7 @@ class _StudioPageState extends State<StudioPage> {
           ),
           const VerticalDivider(width: 1),
           Expanded(
-            child: HtmlElementView(viewType: _viewType),
+            child: ClipRect(child: buildPreview(_blocks)),
           ),
         ],
       ),

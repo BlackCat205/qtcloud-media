@@ -1,9 +1,234 @@
-/// Markdown → 公众号草稿 HTML（逐元素内联样式）。
+/// Markdown 解析与公众号 HTML 渲染。
 ///
-/// 与 CLI（Rust）的 render 保持同一套规则：无 <style> 块、无 class、
-/// 开头 H1 不进正文（标题归草稿 title 字段）。此处为 studio 预览与
-/// 复制到公众号的最小实现，覆盖常用块级与行内语法。
+/// 解析产物为块模型（[Block]），供两处消费：
+/// - [toHtml]：逐元素内联样式的公众号 HTML（与 CLI render 同规则：
+///   无 <style> 块、无 class、开头 H1 不进正文）
+/// - 桌面预览：按块模型直接构建 Flutter Widget（见 preview_desktop.dart）
 library;
+
+// ── 块模型 ──────────────────────────────────────────────
+
+sealed class Block {
+  const Block();
+}
+
+class HeadingBlock extends Block {
+  const HeadingBlock(this.level, this.inlines);
+  final int level; // 2..4（开头 H1 已在解析时丢弃，文中 H1 归为 1）
+  final List<Inline> inlines;
+}
+
+class ParagraphBlock extends Block {
+  const ParagraphBlock(this.inlines);
+  final List<Inline> inlines;
+}
+
+class QuoteBlock extends Block {
+  const QuoteBlock(this.paragraphs);
+  final List<ParagraphBlock> paragraphs;
+}
+
+class CodeBlockText extends Block {
+  const CodeBlockText(this.text);
+  final String text;
+}
+
+class ListBlock extends Block {
+  const ListBlock(this.ordered, this.items);
+  final bool ordered;
+  final List<List<Inline>> items;
+}
+
+class RuleBlock extends Block {
+  const RuleBlock();
+}
+
+sealed class Inline {
+  const Inline();
+}
+
+class TextRun extends Inline {
+  const TextRun(this.text);
+  final String text;
+}
+
+class CodeRun extends Inline {
+  const CodeRun(this.text);
+  final String text;
+}
+
+class StrongRun extends Inline {
+  const StrongRun(this.children);
+  final List<Inline> children;
+}
+
+class EmRun extends Inline {
+  const EmRun(this.children);
+  final List<Inline> children;
+}
+
+class DelRun extends Inline {
+  const DelRun(this.children);
+  final List<Inline> children;
+}
+
+class LinkRun extends Inline {
+  const LinkRun(this.href, this.text);
+  final String href;
+  final String text;
+}
+
+class ImageInline extends Inline {
+  const ImageInline(this.src, this.alt);
+  final String src;
+  final String alt;
+}
+
+// ── 解析 ────────────────────────────────────────────────
+
+final _inlineRe = RegExp(
+    r'`([^`]+)`'
+    r'|\*\*([^*]+)\*\*'
+    r'|\*([^*]+)\*'
+    r'|~~([^~]+)~~'
+    r'|!\[([^\]]*)\]\(([^)]+)\)'
+    r'|\[([^\]]+)\]\(([^)]+)\)');
+
+List<Inline> parseInline(String s) {
+  final out = <Inline>[];
+  var pos = 0;
+  for (final m in _inlineRe.allMatches(s)) {
+    if (m.start > pos) out.add(TextRun(s.substring(pos, m.start)));
+    if (m.group(1) != null) {
+      out.add(CodeRun(m.group(1)!));
+    } else if (m.group(2) != null) {
+      out.add(StrongRun(parseInline(m.group(2)!)));
+    } else if (m.group(3) != null) {
+      out.add(EmRun(parseInline(m.group(3)!)));
+    } else if (m.group(4) != null) {
+      out.add(DelRun(parseInline(m.group(4)!)));
+    } else if (m.group(5) != null) {
+      out.add(ImageInline(m.group(6)!, m.group(5)!));
+    } else {
+      out.add(LinkRun(m.group(8)!, m.group(7)!));
+    }
+    pos = m.end;
+  }
+  if (pos < s.length) out.add(TextRun(s.substring(pos)));
+  return out;
+}
+
+bool _isSpecial(String l) =>
+    l.startsWith('#') ||
+    l.startsWith('```') ||
+    l.startsWith('- ') ||
+    l.startsWith('> ') ||
+    RegExp(r'^\d+\.\s').hasMatch(l) ||
+    l.trim() == '---';
+
+/// 解析 Markdown 为块模型。开头 H1 是文章标题，标题由草稿 title 字段
+/// 承载，不进正文。
+List<Block> parseMarkdown(String markdown) {
+  final lines = markdown.replaceAll('\r\n', '\n').split('\n');
+  final blocks = <Block>[];
+  var i = 0;
+  var firstBlock = true;
+
+  while (i < lines.length) {
+    final line = lines[i];
+    if (line.trim().isEmpty) {
+      i++;
+      continue;
+    }
+
+    if (line.startsWith('```')) {
+      final code = <String>[];
+      i++;
+      while (i < lines.length && !lines[i].startsWith('```')) {
+        code.add(lines[i]);
+        i++;
+      }
+      if (i < lines.length) i++;
+      blocks.add(CodeBlockText(code.join('\n')));
+      firstBlock = false;
+      continue;
+    }
+
+    if (line.startsWith('# ')) {
+      if (!firstBlock) {
+        blocks.add(HeadingBlock(1, parseInline(line.substring(2))));
+      }
+      i++;
+      firstBlock = false;
+      continue;
+    }
+
+    final headingMatch = RegExp(r'^(#{1,4})\s+(.*)$').firstMatch(line);
+    if (headingMatch != null) {
+      blocks.add(HeadingBlock(
+          headingMatch.group(1)!.length, parseInline(headingMatch.group(2)!)));
+      i++;
+      firstBlock = false;
+      continue;
+    }
+
+    if (line.trim() == '---') {
+      blocks.add(const RuleBlock());
+      i++;
+      firstBlock = false;
+      continue;
+    }
+
+    if (line.startsWith('- ') || RegExp(r'^\d+\.\s').hasMatch(line)) {
+      final ordered = RegExp(r'^\d+\.\s').hasMatch(line);
+      final items = <List<Inline>>[];
+      while (i < lines.length &&
+          ((ordered && RegExp(r'^\d+\.\s').hasMatch(lines[i])) ||
+              (!ordered && lines[i].startsWith('- ')))) {
+        final m = ordered
+            ? RegExp(r'^\d+\.\s(.*)$').firstMatch(lines[i])
+            : RegExp(r'^-\s(.*)$').firstMatch(lines[i]);
+        items.add(parseInline(m!.group(1)!));
+        i++;
+      }
+      blocks.add(ListBlock(ordered, items));
+      firstBlock = false;
+      continue;
+    }
+
+    if (line.startsWith('> ')) {
+      final paras = <ParagraphBlock>[];
+      while (i < lines.length && lines[i].startsWith('> ')) {
+        paras.add(ParagraphBlock(parseInline(lines[i].substring(2))));
+        i++;
+      }
+      blocks.add(QuoteBlock(paras));
+      firstBlock = false;
+      continue;
+    }
+
+    final para = <String>[line];
+    i++;
+    while (i < lines.length &&
+        lines[i].trim().isNotEmpty &&
+        !_isSpecial(lines[i])) {
+      para.add(lines[i]);
+      i++;
+    }
+    blocks.add(ParagraphBlock(parseInline(para.join('\n'))));
+    firstBlock = false;
+  }
+  return blocks;
+}
+
+// ── HTML 渲染（逐元素内联样式）───────────────────────────
+
+String escapeHtml(String s) => s
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+
+String escapeAttr(String s) => escapeHtml(s).replaceAll('"', '&quot;');
 
 const _wrapperStyle =
     'font-family:-apple-system,BlinkMacSystemFont,\'Helvetica Neue\',\'PingFang SC\',\'Microsoft YaHei\',sans-serif;'
@@ -36,139 +261,50 @@ const _preCodeStyle =
     'background:none;color:#3f3f3f;font-family:SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;line-height:1.7;';
 const _hrStyle = 'border:none;border-top:1px solid #e5e7eb;margin:16px 0;';
 
-String escapeHtml(String s) => s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
-
-String escapeAttr(String s) => escapeHtml(s).replaceAll('"', '&quot;');
-
-String inline(String text) {
-  var s = escapeHtml(text);
-  s = s.replaceAllMapped(
-      RegExp(r'`([^`]+)`'), (m) => '<code style="$_codeStyle">${m[1]}</code>');
-  s = s.replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'),
-      (m) => '<strong style="$_strongStyle">${m[1]}</strong>');
-  s = s.replaceAllMapped(RegExp(r'\*([^*]+)\*'),
-      (m) => '<em style="$_emStyle">${m[1]}</em>');
-  s = s.replaceAllMapped(RegExp(r'~~([^~]+)~~'),
-      (m) => '<del style="$_delStyle">${m[1]}</del>');
-  s = s.replaceAllMapped(RegExp(r'!\[([^\]]*)\]\(([^)]+)\)'),
-      (m) => '<img style="$_imgStyle" src="${escapeAttr(m[2]!)}" alt="${escapeAttr(m[1]!)}" />');
-  s = s.replaceAllMapped(RegExp(r'\[([^\]]+)\]\(([^)]+)\)'),
-      (m) => '<a style="$_linkStyle" href="${escapeAttr(m[2]!)}">${m[1]}</a>');
-  return s;
-}
-
-/// 渲染整篇文章，返回可直接放进公众号草稿 content 的 HTML 片段。
-String renderArticle(String markdown) {
-  final lines = markdown.replaceAll('\r\n', '\n').split('\n');
-  final buf = StringBuffer();
-  var i = 0;
-  var firstBlock = true;
-
-  bool isSpecial(String l) =>
-      l.startsWith('#') ||
-      l.startsWith('```') ||
-      l.startsWith('- ') ||
-      l.startsWith('> ') ||
-      RegExp(r'^\d+\.\s').hasMatch(l) ||
-      l.trim() == '---';
-
-  while (i < lines.length) {
-    final line = lines[i];
-    if (line.trim().isEmpty) {
-      i++;
-      continue;
-    }
-
-    if (line.startsWith('```')) {
-      final code = <String>[];
-      i++;
-      while (i < lines.length && !lines[i].startsWith('```')) {
-        code.add(lines[i]);
-        i++;
-      }
-      if (i < lines.length) i++;
-      buf.write('<pre style="$_preStyle"><code style="$_preCodeStyle">'
-          '${escapeHtml(code.join('\n'))}</code></pre>');
-      firstBlock = false;
-      continue;
-    }
-
-    if (line.startsWith('# ')) {
-      // 开头 H1 是文章标题，标题由草稿 title 字段承载，不进正文
-      if (!firstBlock) {
-        buf.write(
-            '<h1 style="$_h1Style">${inline(line.substring(2))}</h1>');
-      }
-      i++;
-      firstBlock = false;
-      continue;
-    }
-
-    final headingMatch = RegExp(r'^(#{2,4})\s+(.*)$').firstMatch(line);
-    if (headingMatch != null) {
-      final level = headingMatch.group(1)!.length;
-      final style = switch (level) {
-        2 => _h2Style,
-        3 => _h3Style,
-        _ => _h4Style,
+String inlineToHtml(List<Inline> inlines) => inlines.map((run) {
+      return switch (run) {
+        TextRun(:final text) => escapeHtml(text),
+        CodeRun(:final text) =>
+          '<code style="$_codeStyle">${escapeHtml(text)}</code>',
+        StrongRun(:final children) =>
+          '<strong style="$_strongStyle">${inlineToHtml(children)}</strong>',
+        EmRun(:final children) =>
+          '<em style="$_emStyle">${inlineToHtml(children)}</em>',
+        DelRun(:final children) =>
+          '<del style="$_delStyle">${inlineToHtml(children)}</del>',
+        LinkRun(:final href, :final text) =>
+          '<a style="$_linkStyle" href="${escapeAttr(href)}">${escapeHtml(text)}</a>',
+        ImageInline(:final src, :final alt) =>
+          '<img style="$_imgStyle" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" />',
       };
-      buf.write(
-          '<h$level style="$style">${inline(headingMatch.group(2)!)}</h$level>');
-      i++;
-      firstBlock = false;
-      continue;
-    }
+    }).join();
 
-    if (line.trim() == '---') {
-      buf.write('<hr style="$_hrStyle" />');
-      i++;
-      firstBlock = false;
-      continue;
-    }
-
-    if (line.startsWith('- ') || RegExp(r'^\d+\.\s').hasMatch(line)) {
-      final ordered = RegExp(r'^\d+\.\s').hasMatch(line);
-      final items = <String>[];
-      while (i < lines.length &&
-          ((ordered && RegExp(r'^\d+\.\s').hasMatch(lines[i])) ||
-              (!ordered && lines[i].startsWith('- ')))) {
-        final m = ordered
-            ? RegExp(r'^\d+\.\s(.*)$').firstMatch(lines[i])
-            : RegExp(r'^-\s(.*)$').firstMatch(lines[i]);
-        items.add('<li style="$_liStyle">${inline(m!.group(1)!)}</li>');
-        i++;
-      }
-      final tag = ordered ? 'ol' : 'ul';
-      buf.write('<$tag style="$_listStyle">${items.join()}</$tag>');
-      firstBlock = false;
-      continue;
-    }
-
-    if (line.startsWith('> ')) {
-      final paras = <String>[];
-      while (i < lines.length && lines[i].startsWith('> ')) {
-        paras.add('<p style="$_quotePStyle">${inline(lines[i].substring(2))}</p>');
-        i++;
-      }
-      buf.write(
-          '<blockquote style="$_quoteStyle">${paras.join()}</blockquote>');
-      firstBlock = false;
-      continue;
-    }
-
-    // 段落：收集到下一个块级边界
-    final para = <String>[line];
-    i++;
-    while (i < lines.length && lines[i].trim().isNotEmpty && !isSpecial(lines[i])) {
-      para.add(lines[i]);
-      i++;
-    }
-    buf.write('<p style="$_pStyle">${inline(para.join('\n')).replaceAll('\n', '<br/>')}</p>');
-    firstBlock = false;
-  }
-
-  return '<section style="$_wrapperStyle">$buf</section>';
+String blockToHtml(Block block) {
+  return switch (block) {
+    HeadingBlock(:final level, :final inlines) => () {
+        final style = switch (level) {
+          1 => _h1Style,
+          2 => _h2Style,
+          3 => _h3Style,
+          _ => _h4Style,
+        };
+        return '<h$level style="$style">${inlineToHtml(inlines)}</h$level>';
+      }(),
+    ParagraphBlock(:final inlines) =>
+      '<p style="$_pStyle">${inlineToHtml(inlines).replaceAll('\n', '<br/>')}</p>',
+    QuoteBlock(:final paragraphs) =>
+      '<blockquote style="$_quoteStyle">${paragraphs.map((p) => '<p style="$_quotePStyle">${inlineToHtml(p.inlines)}</p>').join()}</blockquote>',
+    CodeBlockText(:final text) =>
+      '<pre style="$_preStyle"><code style="$_preCodeStyle">${escapeHtml(text)}</code></pre>',
+    ListBlock(:final ordered, :final items) =>
+      '<${ordered ? 'ol' : 'ul'} style="$_listStyle">${items.map((it) => '<li style="$_liStyle">${inlineToHtml(it)}</li>').join()}</${ordered ? 'ol' : 'ul'}>',
+    RuleBlock() => '<hr style="$_hrStyle" />',
+  };
 }
+
+/// 块列表 → 正文 HTML（不含外层 section）。
+String blocksToHtml(List<Block> blocks) => blocks.map(blockToHtml).join();
+
+/// 渲染整篇文章为公众号草稿 content 片段。
+String renderArticle(String markdown) =>
+    '<section style="$_wrapperStyle">${blocksToHtml(parseMarkdown(markdown))}</section>';

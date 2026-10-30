@@ -7,6 +7,66 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+#include <cstring>
+
+// 富文本剪贴板：同时写 UTF8_STRING 与 text/html，
+// 粘贴进公众号编辑器时保留排版（配合 lib/copy_desktop.dart）。
+struct RichClipboardData {
+  gchar* html;
+  gchar* text;
+};
+
+static void rich_clipboard_get(GtkClipboard* clipboard,
+                               GtkSelectionData* selection_data, guint info,
+                               gpointer user_data) {
+  RichClipboardData* data = static_cast<RichClipboardData*>(user_data);
+  if (info == 0) {
+    gtk_selection_data_set_text(selection_data, data->text, -1);
+  } else {
+    gtk_selection_data_set(selection_data,
+                           gtk_selection_data_get_target(selection_data), 8,
+                           reinterpret_cast<const guchar*>(data->html),
+                           static_cast<gint>(strlen(data->html)));
+  }
+}
+
+static void rich_clipboard_clear(GtkClipboard* clipboard, gpointer user_data) {
+  RichClipboardData* data = static_cast<RichClipboardData*>(user_data);
+  g_free(data->html);
+  g_free(data->text);
+  g_free(data);
+}
+
+static void clipboard_method_call_cb(FlMethodChannel* channel,
+                                     FlMethodCall* method_call,
+                                     gpointer user_data) {
+  g_autoptr(FlMethodResponse) response = nullptr;
+  if (strcmp(fl_method_call_get_name(method_call), "setRich") == 0) {
+    FlValue* args = fl_method_call_get_args(method_call);
+    FlValue* html = fl_value_lookup_string(args, "html");
+    FlValue* text = fl_value_lookup_string(args, "text");
+    if (html == nullptr || text == nullptr) {
+      response = FL_METHOD_RESPONSE(
+          fl_method_error_response_new("args", "html 与 text 必填", nullptr));
+    } else {
+      RichClipboardData* data = g_new(RichClipboardData, 1);
+      data->html = g_strdup(fl_value_get_string(html));
+      data->text = g_strdup(fl_value_get_string(text));
+      const GtkTargetEntry targets[] = {
+          {const_cast<gchar*>("UTF8_STRING"), 0, 0},
+          {const_cast<gchar*>("text/html"), 0, 1},
+      };
+      gtk_clipboard_set_with_data(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),
+                                  targets, 2, rich_clipboard_get,
+                                  rich_clipboard_clear, data);
+      response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+    }
+  } else {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  }
+  fl_method_call_respond(method_call, response, nullptr);
+}
+
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
@@ -45,11 +105,11 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "qtcloud_media_studio");
+    gtk_header_bar_set_title(header_bar, "量潮媒体云工作台");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "qtcloud_media_studio");
+    gtk_window_set_title(window, "量潮媒体云工作台");
   }
 
   gtk_window_set_default_size(window, 1280, 720);
@@ -74,6 +134,14 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+
+  g_autoptr(FlStandardMethodCodec) clipboard_codec = fl_standard_method_codec_new();
+  g_autoptr(FlMethodChannel) clipboard_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      "qtcloud_media/clipboard", FL_METHOD_CODEC(clipboard_codec));
+  fl_method_channel_set_method_call_handler(clipboard_channel,
+                                           clipboard_method_call_cb, self,
+                                           nullptr);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
