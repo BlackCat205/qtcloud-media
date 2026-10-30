@@ -20,6 +20,8 @@ pub fn render(markdown: &str, theme: &Theme) -> String {
         quote_depth: 0,
         in_thead: false,
         in_image_alt: false,
+        started: false,
+        skip_h1: false,
     };
     for ev in parser {
         w.event(ev);
@@ -34,10 +36,19 @@ struct Writer<'a> {
     quote_depth: u32,
     in_thead: bool,
     in_image_alt: bool,
+    started: bool,
+    skip_h1: bool,
 }
 
 impl Writer<'_> {
     fn event(&mut self, ev: Event<'_>) {
+        // 开头的 H1 是文章标题，标题由草稿 title 字段承载，不进正文
+        if self.skip_h1 {
+            if matches!(ev, Event::End(TagEnd::Heading(_))) {
+                self.skip_h1 = false;
+            }
+            return;
+        }
         match ev {
             Event::Start(tag) => self.start(tag),
             Event::End(tag) => self.end(tag),
@@ -72,6 +83,16 @@ impl Writer<'_> {
     }
 
     fn start(&mut self, tag: Tag<'_>) {
+        if let Tag::Heading {
+            level: HeadingLevel::H1,
+            ..
+        } = tag
+            && !self.started
+        {
+            self.skip_h1 = true;
+            return;
+        }
+        self.started = true;
         match tag {
             Tag::Paragraph => {
                 let style = if self.quote_depth > 0 {
@@ -336,5 +357,14 @@ mod tests {
         let md = "数学 < b & c > 公式\n";
         let html = render(md, &Theme::default());
         assert!(html.contains("数学 &lt; b &amp; c &gt; 公式"));
+    }
+
+    #[test]
+    fn skips_leading_h1_but_keeps_later_ones() {
+        let md = "# 标题\n\n正文。\n\n# 文中一级标题\n\n后面。\n";
+        let html = render(md, &Theme::default());
+        assert!(!html.contains(">标题<"), "开头 H1 应被跳过");
+        assert!(html.contains("正文。"));
+        assert!(html.contains("文中一级标题"), "文中 H1 应保留");
     }
 }
