@@ -40,7 +40,7 @@ jobs:
         working-directory: src/provider
         run: |
           V="${{ needs.check.outputs.version }}"
-          tar czf "../qtcloud-media-provider-${V}-linux-x64.tar.gz" -C target/release qtcloud-media-provider
+          tar czf "qtcloud-media-provider-${V}-linux-x64.tar.gz" -C target/release qtcloud-media-provider
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
