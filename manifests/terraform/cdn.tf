@@ -107,12 +107,9 @@ resource "alicloud_ram_role" "cdn_private_oss" {
   EOT
 }
 
-# 策略绑定到角色
-resource "alicloud_ram_role_policy_attachment" "cdn_private_oss" {
-  role_name   = alicloud_ram_role.cdn_private_oss.name
-  policy_name = alicloud_ram_policy.cdn_private_oss.policy_name
-  policy_type = "Custom"
-}
+# 策略绑定到角色（账号级绑定已存在——由首个 studio 部署创建，不在本仓重复管理；
+# 若某环境缺失，执行：aliyun ram AttachPolicyToRole --RoleName AliyunCDNAccessingPrivateOSSRole
+#   --PolicyName AliyunCDNAccessingPrivateOSSRolePolicy --PolicyType Custom）
 
 # ── DNS：CNAME 接入 ─────────────────────────────────────────────────
 
