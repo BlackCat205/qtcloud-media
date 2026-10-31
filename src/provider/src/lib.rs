@@ -310,7 +310,8 @@ fn publish_blocking(state: AppState, account: Account, req: PublishReq) -> Resul
             b64.trim_end_matches('\n'),
         )
         .context("thumb_data_b64 解码失败")?;
-        wechat.upload_thumb_bytes(&bytes, "cover.png", "image/png")?
+        let (ext, mime) = sniff_image(&bytes);
+        wechat.upload_thumb_bytes(&bytes, &format!("cover.{ext}"), mime)?
     } else if let Some(url) = req.thumb_url.filter(|s| !s.is_empty()) {
         let bytes = reqwest_get_bytes(&url)?;
         let name = url
@@ -401,6 +402,17 @@ fn reqwest_get_bytes(url: &str) -> Result<Vec<u8>> {
         bail!("下载封面失败：{url} → {}", resp.status());
     }
     Ok(resp.bytes()?.to_vec())
+}
+
+/// 按魔数字节嗅探图片类型（base64 封面没有文件名可依）。
+fn sniff_image(bytes: &[u8]) -> (&'static str, &'static str) {
+    match bytes {
+        [0x89, b'P', b'N', b'G', ..] => ("png", "image/png"),
+        [0xFF, 0xD8, 0xFF, ..] => ("jpg", "image/jpeg"),
+        [b'G', b'I', b'F', b'8', ..] => ("gif", "image/gif"),
+        [b'R', b'I', b'F', b'F', .., b'W', b'E', b'B', b'P'] => ("webp", "image/webp"),
+        _ => ("jpg", "image/jpeg"),
+    }
 }
 
 fn append_record(
@@ -601,5 +613,20 @@ mod tests {
         let v: Vec<serde_json::Value> = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(v.len(), 2);
         assert_eq!(v[1]["action"], "已更新");
+    }
+
+    #[test]
+    fn sniffs_image_magic_bytes() {
+        assert_eq!(
+            sniff_image(&[0x89, b'P', b'N', b'G', 0, 0]),
+            ("png", "image/png")
+        );
+        assert_eq!(
+            sniff_image(&[0xFF, 0xD8, 0xFF, 0xE0]),
+            ("jpg", "image/jpeg")
+        );
+        assert_eq!(sniff_image(b"GIF89a.."), ("gif", "image/gif"));
+        assert_eq!(sniff_image(b"RIFF\0\0\0\0WEBP"), ("webp", "image/webp"));
+        assert_eq!(sniff_image(b"unknown"), ("jpg", "image/jpeg"));
     }
 }

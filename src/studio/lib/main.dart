@@ -12,6 +12,9 @@ import 'md.dart';
 import 'preview.dart'
     if (dart.library.js_interop) 'preview_web.dart'
     if (dart.library.io) 'preview_desktop.dart';
+import 'remote.dart'
+    if (dart.library.js_interop) 'remote_web.dart'
+    if (dart.library.io) 'remote_io.dart';
 import 'theme.dart';
 import 'theme_loader.dart'
     if (dart.library.js_interop) 'theme_loader_web.dart'
@@ -72,6 +75,7 @@ class _StudioPageState extends State<StudioPage> {
   String _html = '';
   String? _draftName;
   List<String> _draftNames = const [];
+  RemoteSettings? _remote;
 
   @override
   void initState() {
@@ -80,6 +84,13 @@ class _StudioPageState extends State<StudioPage> {
     _controller.addListener(_onChanged);
     _loadTheme();
     _refreshDrafts();
+    _loadRemote();
+  }
+
+  Future<void> _loadRemote() async {
+    final s = await loadSettings();
+    if (!mounted) return;
+    setState(() => _remote = s);
   }
 
   Future<void> _refreshDrafts() async {
@@ -110,6 +121,96 @@ class _StudioPageState extends State<StudioPage> {
       if (!mounted) return;
       setState(_reparse);
     });
+  }
+
+  Future<void> _publishRemote() async {
+    final r = _remote;
+    if (r == null) return;
+    final title = _draftName ?? '未命名';
+    try {
+      final result = await publishRemote(
+        provider: r.provider,
+        account: r.account,
+        markdown: _controller.text,
+        title: title,
+        draft: _draftName,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已推送：$result（不会自动群发）')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('远程推送失败：$e')));
+    }
+  }
+
+  Future<void> _editRemote() async {
+    final providerCtrl = TextEditingController(
+      text: _remote?.provider ?? 'http://127.0.0.1:8787',
+    );
+    String? account = _remote?.account;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('远程设置（provider）'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: providerCtrl,
+                  decoration: const InputDecoration(labelText: 'provider 地址'),
+                ),
+                const SizedBox(height: 12),
+                FutureBuilder<List<String>>(
+                  future: listAccounts(providerCtrl.text.trim()),
+                  builder: (context, snap) => DropdownButtonFormField<String>(
+                    initialValue: (snap.data?.contains(account) ?? false)
+                        ? account
+                        : null,
+                    hint: Text(
+                      snap.connectionState == ConnectionState.waiting
+                          ? '读取账号中…'
+                          : (snap.data?.isEmpty ?? true)
+                          ? '（provider 侧暂无账号）'
+                          : '选择账号',
+                    ),
+                    items: (snap.data ?? [])
+                        .map((a) => DropdownMenuItem(value: a, child: Text(a)))
+                        .toList(),
+                    onChanged: (v) => setState(() => account = v),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved == true) {
+      final s = RemoteSettings(
+        provider: providerCtrl.text.trim(),
+        account: account ?? '',
+      );
+      await saveSettings(s);
+      if (!mounted) return;
+      setState(() => _remote = s);
+    }
   }
 
   Future<void> _copy() async {
@@ -204,6 +305,17 @@ class _StudioPageState extends State<StudioPage> {
             tooltip: '保存草稿',
             onPressed: _saveDraft,
             icon: const Icon(Icons.save),
+          ),
+          if (_remote != null)
+            IconButton(
+              tooltip: '推到公众号（远程：${_remote!.account}）',
+              onPressed: _publishRemote,
+              icon: const Icon(Icons.cloud_upload),
+            ),
+          IconButton(
+            tooltip: '远程设置（provider）',
+            onPressed: _editRemote,
+            icon: const Icon(Icons.cloud),
           ),
           const SizedBox(width: 4),
           FilledButton.icon(

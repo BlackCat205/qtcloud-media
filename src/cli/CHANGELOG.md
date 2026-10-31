@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### 新增
+
+- 远程模式：`publish --remote --account <名>` 走 provider（地址 `--provider` / `QTCLOUD_MEDIA_PROVIDER` / 缺省本机 8787）；本地封面自动转 base64
+- 为 provider 开放库接口：`render_file` / `inline_local_images` 公开，新增 `upload_thumb_bytes`（封面来自 base64/URL、无本地文件时用）
+
 ## [0.1.3] - 2026-10-31
 
 ### 变更

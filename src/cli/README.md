@@ -45,6 +45,20 @@ qtcloud-media publish 我的文章 --title ... --thumb ...
 
 `render` 的位置参数同样接受草稿名。正式要进 brochure/library 的定稿仍从草稿移入仓库，git 是正本。
 
+### 远程模式（接 provider）
+
+local（缺省）：本机直连微信。remote：发布交给 provider（账号托管、发布记录在服务端；草稿与主题仍是你本机的 XDG 正本）。
+
+```bash
+# 先把账号交给 provider（一次性）
+curl -X PUT http://127.0.0.1:8787/accounts/主号 -H 'content-type: application/json' \
+  -d '{"app_id":"...","app_secret":"..."}'
+
+qtcloud-media publish 我的文章 --remote --account 主号 --title ... --thumb ...
+# 封面是本地路径时自动转 base64（provider 按魔数嗅探类型）；
+# provider 地址缺省 http://127.0.0.1:8787，可用 --provider 或 QTCLOUD_MEDIA_PROVIDER 覆盖
+```
+
 ### 技能管理
 
 技能文件编译期内嵌进二进制，随 `cargo install` 带到任何机器：

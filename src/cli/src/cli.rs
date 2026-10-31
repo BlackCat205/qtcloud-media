@@ -59,6 +59,15 @@ enum Cmd {
         /// 原文链接
         #[arg(long, default_value = "")]
         source_url: String,
+        /// 远程模式：经 provider 发布（账号托管在 provider 侧，需 --account）
+        #[arg(long)]
+        remote: bool,
+        /// provider 地址，缺省取环境变量 QTCLOUD_MEDIA_PROVIDER，再缺省 http://127.0.0.1:8787
+        #[arg(long)]
+        provider: Option<String>,
+        /// provider 侧托管的账号名（--remote 时必填）
+        #[arg(long)]
+        account: Option<String>,
     },
     /// 技能管理：列出 / 安装内嵌的 agent 技能文件
     Skills {
@@ -123,8 +132,24 @@ pub fn run() -> Result<()> {
             digest,
             author,
             source_url,
+            remote,
+            provider,
+            account,
         } => {
             let input = drafts::resolve_input(&markdown)?;
+            if remote {
+                return publish_remote(
+                    &input,
+                    theme.as_deref(),
+                    &title,
+                    &thumb,
+                    &digest,
+                    &author,
+                    &source_url,
+                    account.as_deref(),
+                    provider.as_deref(),
+                );
+            }
             let html = render_file(input.path(), theme.as_deref())?;
             let wechat = Wechat::authorize(&env_var(ENV_APP_ID)?, &env_var(ENV_APP_SECRET)?)?;
             let html = inline_local_images(&html, input.path(), &wechat)?;
@@ -266,6 +291,79 @@ pub fn run() -> Result<()> {
             }
         },
     }
+}
+
+/// 远程模式：把发布请求交给 provider（账号托管、发布记录都在服务端；
+/// 本地正本不变——草稿与 meta 仍是 XDG 同一套）。
+// CLI 参数透传函数，参数多是形态使然
+#[allow(clippy::too_many_arguments)]
+fn publish_remote(
+    input: &drafts::Input,
+    theme: Option<&str>,
+    title: &str,
+    thumb: &str,
+    digest: &str,
+    author: &str,
+    source_url: &str,
+    account: Option<&str>,
+    provider: Option<&str>,
+) -> Result<()> {
+    use base64::Engine as _;
+
+    let account = account
+        .context("--remote 需要 --account <provider 侧账号名>（先把账号 PUT 给 provider）")?;
+    let base = provider
+        .map(str::to_owned)
+        .or_else(|| std::env::var("QTCLOUD_MEDIA_PROVIDER").ok())
+        .unwrap_or_else(|| "http://127.0.0.1:8787".to_string());
+    let markdown = std::fs::read_to_string(input.path())
+        .with_context(|| format!("读取正文失败：{}", input.path().display()))?;
+
+    let mut body = serde_json::json!({
+        "account": account,
+        "markdown": markdown,
+        "title": title,
+        "digest": digest,
+        "author": author,
+        "source_url": source_url,
+    });
+    if let Some(t) = theme {
+        body["theme"] = t.into();
+    }
+    if let drafts::Input::Draft { name, .. } = input {
+        body["draft"] = name.clone().into();
+    }
+    // 封面三选一：URL → thumb_url；本地文件 → base64（provider 按魔数嗅探类型）；否则按已有 media_id
+    if thumb.starts_with("http") {
+        body["thumb_url"] = thumb.into();
+    } else if Path::new(thumb).is_file() {
+        let bytes = std::fs::read(thumb).with_context(|| format!("读取封面图失败：{thumb}"))?;
+        body["thumb_data_b64"] = base64::engine::general_purpose::STANDARD
+            .encode(&bytes)
+            .into();
+    } else {
+        body["thumb_media_id"] = thumb.into();
+    }
+
+    let client = reqwest::blocking::Client::new();
+    let resp = client
+        .post(format!("{base}/publish"))
+        .json(&body)
+        .send()
+        .with_context(|| format!("调用 provider 失败：{base}（服务起来了吗？）"))?;
+    if !resp.status().is_success() {
+        let text = resp.text().unwrap_or_default();
+        bail!("provider 返回错误：{text}");
+    }
+    let v: serde_json::Value = resp.json().context("解析 provider 响应失败")?;
+    println!(
+        "{}公众号草稿箱，media_id={}（provider {}，账号 {account}）",
+        v["action"].as_str().unwrap_or("已推送"),
+        v["media_id"].as_str().unwrap_or("?"),
+        base
+    );
+    println!("注意：草稿不会自动群发，请到公众号后台确认后手动群发。");
+    Ok(())
 }
 
 fn embedded_skills() -> Vec<agent_skills_rs::Skill> {

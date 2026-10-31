@@ -35,6 +35,7 @@ ln -sf ~/.local/opt/qtcloud-media-studio/qtcloud_media_studio ~/.local/bin/qtclo
 | `lib/preview_*.dart` / `lib/copy_*.dart` | 平台条件导入：预览与富文本复制的两套实现 |
 | `lib/main.dart` | 单页工作台：编辑 + 预览 + 复制 |
 | `lib/drafts_io.dart` | 草稿读写：与 CLI 共用 `~/.local/state/qtcloud-media/drafts/`（打开/保存） |
+| `lib/remote_io.dart` | 远程模式：provider 地址/账号设置（`~/.config/qtcloud-media/studio.json`）、列账号、一键推送；缺省 local（纯本地+剪贴板） |
 | `lib/theme.dart` | 主题参数（与 CLI theme.rs 同字段的扁平 TOML） |
 | `linux/runner/my_application.cc` | GTK 富文本剪贴板方法通道 |
 

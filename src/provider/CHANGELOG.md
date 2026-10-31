@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### 变更
+
+- base64 封面按魔数字节嗅探类型（png/jpg/gif/webp），不再假定 png
+
 ## [0.0.1] - 2026-10-31
 
 ### 新增
