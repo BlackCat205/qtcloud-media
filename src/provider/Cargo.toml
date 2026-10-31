@@ -1,6 +1,6 @@
 [package]
 name = "qtcloud-media-provider"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 description = "量潮媒体云 provider：render / publish / 账号 / 主题 四动词薄服务，本地正本在 XDG"
 license = "MIT OR Apache-2.0"

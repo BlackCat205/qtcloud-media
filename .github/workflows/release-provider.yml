@@ -1,0 +1,48 @@
+# 发布 provider：推送 provider/* tag（如 provider/v0.1.0，由 qtcloud-devops release publish 创建）时，
+# 构建 Linux 二进制并挂到 GH Release。定位是本机/自托管服务端，只出 linux-x64；
+# crates.io 发布暂不做——依赖 qtcloud-media-cli 为 path 依赖，等 cli 侧库接口随版本对齐再议。
+name: release-provider
+on:
+  push:
+    tags:
+      - 'provider/*'
+
+jobs:
+  check:
+    if: startsWith(github.ref, 'refs/tags/provider/')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: extract version from tag
+        id: version
+        run: |
+          V="${GITHUB_REF_NAME#provider/}"
+          echo "value=${V#v}" >> $GITHUB_OUTPUT
+      - name: validate version matches Cargo.toml and changelog
+        run: |
+          V="${{ steps.version.outputs.value }}"
+          grep -q "^version = \"${V}\"$" src/provider/Cargo.toml || { echo "Cargo.toml 版本与标签不一致"; exit 1; }
+          grep -q "^## \[${V}\]" src/provider/CHANGELOG.md || { echo "CHANGELOG 缺 ${V} 小节"; exit 1; }
+
+  build-and-release:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: build release binary
+        working-directory: src/provider
+        run: cargo build --release
+      - name: package
+        working-directory: src/provider
+        run: |
+          V="${{ needs.check.outputs.version }}"
+          tar czf "../qtcloud-media-provider-${V}-linux-x64.tar.gz" -C target/release qtcloud-media-provider
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: provider ${{ needs.check.outputs.version }}
+          files: src/provider/qtcloud-media-provider-*.tar.gz
