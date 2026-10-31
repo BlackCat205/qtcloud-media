@@ -18,6 +18,7 @@ jobs:
       - name: validate version matches pubspec and changelog
         run: |
           V="${{ steps.version.outputs.value }}"
+          V="${V#v}"
           grep -q "^version: ${V}$" src/studio/pubspec.yaml || { echo "pubspec 版本与标签不一致"; exit 1; }
           grep -q "^## \[${V}\]" src/studio/CHANGELOG.md || { echo "CHANGELOG 缺 ${V} 小节"; exit 1; }
 
