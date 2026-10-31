@@ -275,7 +275,7 @@ fn embedded_skills() -> Vec<agent_skills_rs::Skill> {
     ]
 }
 
-fn render_file(markdown: &Path, theme_spec: Option<&str>) -> Result<String> {
+pub fn render_file(markdown: &Path, theme_spec: Option<&str>) -> Result<String> {
     let text = std::fs::read_to_string(markdown)
         .with_context(|| format!("读取 Markdown 失败：{}", markdown.display()))?;
     let theme = match theme_spec {
@@ -293,7 +293,7 @@ fn render_file(markdown: &Path, theme_spec: Option<&str>) -> Result<String> {
 }
 
 /// 把 content 里的本地图片替换为已上传的微信 URL。
-fn inline_local_images(html: &str, markdown: &Path, wechat: &Wechat) -> Result<String> {
+pub fn inline_local_images(html: &str, markdown: &Path, wechat: &Wechat) -> Result<String> {
     let re = regex::Regex::new(r#"<img[^>]*src="([^"]+)""#).expect("静态正则");
     let base = markdown.parent().unwrap_or_else(|| Path::new("."));
     let mut uploads: std::collections::HashMap<String, String> = std::collections::HashMap::new();

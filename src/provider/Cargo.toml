@@ -1,0 +1,21 @@
+[package]
+name = "qtcloud-media-provider"
+version = "0.0.1"
+edition = "2024"
+description = "量潮媒体云 provider：render / publish / 账号 / 主题 四动词薄服务，本地正本在 XDG"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+qtcloud-media-cli = { path = "../cli" }
+anyhow = "1"
+axum = "0.8"
+base64 = "0.22"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+toml = "0.8"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+tempfile = "3"

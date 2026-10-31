@@ -101,9 +101,14 @@ impl Wechat {
     pub fn upload_thumb(&self, path: &Path) -> Result<String> {
         let bytes =
             std::fs::read(path).with_context(|| format!("读取封面图失败：{}", path.display()))?;
-        let part = reqwest::blocking::multipart::Part::bytes(bytes)
-            .file_name(file_name(path)?)
-            .mime_str(image_mime(path))?;
+        self.upload_thumb_bytes(&bytes, &file_name(path)?, image_mime(path))
+    }
+
+    /// 按字节上传封面（provider 场景：封面来自 base64 / 远程 URL，无本地文件）。
+    pub fn upload_thumb_bytes(&self, bytes: &[u8], file_name: &str, mime: &str) -> Result<String> {
+        let part = reqwest::blocking::multipart::Part::bytes(bytes.to_vec())
+            .file_name(file_name.to_string())
+            .mime_str(mime)?;
         let form = reqwest::blocking::multipart::Form::new().part("media", part);
         let url = format!(
             "{API}/cgi-bin/material/add_material?access_token={}&type=image",
