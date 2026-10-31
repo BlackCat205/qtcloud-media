@@ -64,13 +64,17 @@ jobs:
           access-key-id: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
           access-key-secret: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
 
-      # 静态资源长缓存：内容按版本变化，文件名带 hash
-      - run: ossutil cp src/studio/build/web/ oss://qtcloud-media-studio/ -r -f --meta=Cache-Control:public,max-age=31536000
-
-      # 元信息与入口文件单独 no-cache：长缓存会导致浏览器拿不到新版
+      # 入口文件先推 no-cache，再推长缓存静态资源（整包里排除入口三件套）；
+      # 顺序反过来会有窗口期：入口页带着长缓存先落地，被 CDN 边缘缓存后白屏（2026-10-31 实发）
       - run: ossutil cp src/studio/build/web/manifest.json oss://qtcloud-media-studio/manifest.json -f --meta=Cache-Control:no-cache
       - run: ossutil cp src/studio/build/web/index.html oss://qtcloud-media-studio/index.html -f --meta=Cache-Control:no-cache
       - run: ossutil cp src/studio/build/web/flutter_bootstrap.js oss://qtcloud-media-studio/flutter_bootstrap.js -f --meta=Cache-Control:no-cache
+
+      # 静态资源长缓存：内容按版本变化，文件名带 hash
+      - run: |
+          ossutil cp src/studio/build/web/ oss://qtcloud-media-studio/ -r -f \
+            --exclude "index.html" --exclude "manifest.json" --exclude "flutter_bootstrap.js" \
+            --meta=Cache-Control:public,max-age=31536000
 
       - name: Refresh CDN
         run: |
