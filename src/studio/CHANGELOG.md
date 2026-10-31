@@ -4,8 +4,7 @@
 
 ### 新增
 
-- 网页托管：GitHub Pages（`deploy-studio.yml`，push main 自动构建部署 `quanttide.github.io/qtcloud-media`）
-- Windows 打包：`release-studio.yml` 发版时出 windows-x64 zip（随下次发版首验）
+- 发布部署（家族惯例，参考 qtcloud-flutter-studio 模板）：`deploy-studio.yml`（分支/PR 门禁，`studio/*` tag 构建部署到 OSS）+ `manifests/terraform/`（studio-bucket + CDN/私有回源/强制 HTTPS + DNS，域名 studio.media.cloud.quanttide.com）；Windows 打包随 `release-studio.yml`（首验随下次发版）
 
 ## [0.1.1] - 2026-10-31
 

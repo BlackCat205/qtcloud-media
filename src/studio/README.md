@@ -16,7 +16,7 @@
 
 ## 运行 / 安装
 
-- 网页版：https://quanttide.github.io/qtcloud-media/ （浏览器打开即用，push main 自动部署）
+- 网页版：https://studio.media.cloud.quanttide.com/ （OSS + CDN，`studio/*` tag 自动部署；基础设施见 `manifests/terraform/`）
 - Windows：发版时在 [Releases](../../releases) 下载 `studio-<版本>-windows-x64.zip`，解压运行 `Release/qtcloud_media_studio.exe`（CI 打包，首验随下次发版）
 - Linux 桌面（本机安装）：
 

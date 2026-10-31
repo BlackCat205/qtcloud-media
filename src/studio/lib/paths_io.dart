@@ -7,8 +7,8 @@ import 'dart:io';
 Directory _base(String varName, List<String> fallbackParts) {
   final env = Platform.environment[varName];
   final value = (env != null && env.startsWith('/')) ? env : null;
-  final base = value ??
-      [Platform.environment['HOME'] ?? '', ...fallbackParts].join('/');
+  final base =
+      value ?? [Platform.environment['HOME'] ?? '', ...fallbackParts].join('/');
   return Directory('$base/qtcloud-media');
 }
 

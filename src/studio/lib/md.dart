@@ -89,12 +89,13 @@ class ImageInline extends Inline {
 // ── 解析 ────────────────────────────────────────────────
 
 final _inlineRe = RegExp(
-    r'`([^`]+)`'
-    r'|\*\*([^*]+)\*\*'
-    r'|\*([^*]+)\*'
-    r'|~~([^~]+)~~'
-    r'|!\[([^\]]*)\]\(([^)]+)\)'
-    r'|\[([^\]]+)\]\(([^)]+)\)');
+  r'`([^`]+)`'
+  r'|\*\*([^*]+)\*\*'
+  r'|\*([^*]+)\*'
+  r'|~~([^~]+)~~'
+  r'|!\[([^\]]*)\]\(([^)]+)\)'
+  r'|\[([^\]]+)\]\(([^)]+)\)',
+);
 
 List<Inline> parseInline(String s) {
   final out = <Inline>[];
@@ -167,8 +168,12 @@ List<Block> parseMarkdown(String markdown) {
 
     final headingMatch = RegExp(r'^(#{1,4})\s+(.*)$').firstMatch(line);
     if (headingMatch != null) {
-      blocks.add(HeadingBlock(
-          headingMatch.group(1)!.length, parseInline(headingMatch.group(2)!)));
+      blocks.add(
+        HeadingBlock(
+          headingMatch.group(1)!.length,
+          parseInline(headingMatch.group(2)!),
+        ),
+      );
       i++;
       firstBlock = false;
       continue;
@@ -231,34 +236,36 @@ String escapeHtml(String s) =>
 String escapeAttr(String s) => escapeHtml(s).replaceAll('"', '&quot;');
 
 String inlineToHtml(List<Inline> inlines, ThemeStyles t) => inlines
-    .map((run) => switch (run) {
-          TextRun(:final text) => escapeHtml(text),
-          CodeRun(:final text) =>
-            '<code style="${t.codeStyle}">${escapeHtml(text)}</code>',
-          StrongRun(:final children) =>
-            '<strong style="${t.strongStyle}">${inlineToHtml(children, t)}</strong>',
-          EmRun(:final children) =>
-            '<em style="${t.emStyle}">${inlineToHtml(children, t)}</em>',
-          DelRun(:final children) =>
-            '<del style="${t.delStyle}">${inlineToHtml(children, t)}</del>',
-          LinkRun(:final href, :final text) =>
-            '<a style="${t.linkStyle}" href="${escapeAttr(href)}">${escapeHtml(text)}</a>',
-          ImageInline(:final src, :final alt) =>
-            '<img style="${t.imgStyle}" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" />',
-        })
+    .map(
+      (run) => switch (run) {
+        TextRun(:final text) => escapeHtml(text),
+        CodeRun(:final text) =>
+          '<code style="${t.codeStyle}">${escapeHtml(text)}</code>',
+        StrongRun(:final children) =>
+          '<strong style="${t.strongStyle}">${inlineToHtml(children, t)}</strong>',
+        EmRun(:final children) =>
+          '<em style="${t.emStyle}">${inlineToHtml(children, t)}</em>',
+        DelRun(:final children) =>
+          '<del style="${t.delStyle}">${inlineToHtml(children, t)}</del>',
+        LinkRun(:final href, :final text) =>
+          '<a style="${t.linkStyle}" href="${escapeAttr(href)}">${escapeHtml(text)}</a>',
+        ImageInline(:final src, :final alt) =>
+          '<img style="${t.imgStyle}" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" />',
+      },
+    )
     .join();
 
 String blockToHtml(Block block, ThemeStyles t) {
   return switch (block) {
     HeadingBlock(:final level, :final inlines) => () {
-        final size = switch (level) {
-          1 => t.h1Size,
-          2 => t.h2Size,
-          3 => t.h3Size,
-          _ => t.h4Size,
-        };
-        return '<h$level style="${t.headingStyle(size)}">${inlineToHtml(inlines, t)}</h$level>';
-      }(),
+      final size = switch (level) {
+        1 => t.h1Size,
+        2 => t.h2Size,
+        3 => t.h3Size,
+        _ => t.h4Size,
+      };
+      return '<h$level style="${t.headingStyle(size)}">${inlineToHtml(inlines, t)}</h$level>';
+    }(),
     ParagraphBlock(:final inlines) =>
       '<p style="${t.pStyle}">${inlineToHtml(inlines, t).replaceAll('\n', '<br/>')}</p>',
     QuoteBlock(:final paragraphs) =>

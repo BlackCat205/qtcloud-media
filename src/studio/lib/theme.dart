@@ -58,8 +58,10 @@ class ThemeStyles {
       if (t.isEmpty || t.startsWith('#')) continue;
       final eq = t.indexOf('=');
       if (eq <= 0) continue;
-      map[t.substring(0, eq).trim()] =
-          t.substring(eq + 1).trim().replaceAll('"', '');
+      map[t.substring(0, eq).trim()] = t
+          .substring(eq + 1)
+          .trim()
+          .replaceAll('"', '');
     }
     double num(String key, double fallback) {
       final v = double.tryParse(map[key] ?? '');
@@ -69,7 +71,10 @@ class ThemeStyles {
     String str(String key, String fallback) => map[key] ?? fallback;
     return ThemeStyles(
       fontFamily: str('font_family', const ThemeStyles().fontFamily),
-      codeFontFamily: str('code_font_family', const ThemeStyles().codeFontFamily),
+      codeFontFamily: str(
+        'code_font_family',
+        const ThemeStyles().codeFontFamily,
+      ),
       fontSize: num('font_size', 16),
       lineHeight: num('line_height', 1.8),
       textColor: str('text_color', '#3f3f3f'),

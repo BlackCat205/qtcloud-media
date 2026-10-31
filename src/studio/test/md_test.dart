@@ -11,7 +11,9 @@ void main() {
   });
 
   test('全内联样式：无 style 块、无 class', () {
-    final html = renderArticle('## 小节\n\n**重点** 与 `代码`\n\n```bash\necho hi\n```\n\n- 项\n\n> 引用\n');
+    final html = renderArticle(
+      '## 小节\n\n**重点** 与 `代码`\n\n```bash\necho hi\n```\n\n- 项\n\n> 引用\n',
+    );
     expect(html, contains('<h2 style='));
     expect(html, contains('<strong style='));
     expect(html, contains('<code style='));
@@ -33,7 +35,8 @@ void main() {
   });
 
   test('主题 TOML 解析与应用', () {
-    const toml = 'name = "night"\ntext_color = "#111111"\nh2_size = 24\nline_height = 2.0\n';
+    const toml =
+        'name = "night"\ntext_color = "#111111"\nh2_size = 24\nline_height = 2.0\n';
     final t = ThemeStyles.fromToml(toml);
     expect(t.textColor, '#111111');
     expect(t.h2Size, 24);

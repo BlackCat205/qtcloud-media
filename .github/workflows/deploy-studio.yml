@@ -1,41 +1,91 @@
+# 发布 studio（家族惯例，参考 quanttide-flutter-studio 模板 / qtcloud-work 的 deploy-studio.yml）：
+#   分支/PR 只跑门禁；studio/* tag 才构建部署。
+# 链路：tag → Actions（flutter build web + ossutil cp）→ OSS 桶 qtcloud-media-studio（静态网站模式，私有）
+#   → 阿里云 CDN（studio.media.cloud.quanttide.com，私有回源鉴权）→ 用户浏览器
+# 基础设施：manifests/terraform/（studio-bucket.tf + cdn.tf），证书由 acme.sh 单域名管理
+# 前置：GitHub Secrets 配好 ALIYUN_ACCESS_KEY_ID / ALIYUN_ACCESS_KEY_SECRET（org secret 自动继承）
 name: deploy-studio
+
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'src/studio/**'
-      - '.github/workflows/deploy-studio.yml'
-  workflow_dispatch:
+    branches: ['**']
+    tags: ['studio/*']
+    paths: ['src/studio/**', '.github/workflows/deploy-studio.yml']
+  pull_request:
+    paths: ['src/studio/**', '.github/workflows/deploy-studio.yml']
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
+# 按 ref 分组：分支上的门禁不会把正在跑的发布干掉
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: deploy-studio-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-deploy:
-    if: github.ref == 'refs/heads/main'
+  quality-gates:
+    name: Quality Gates
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: src/studio
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
+
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
           flutter-version: '3.44.9'
-      # Pages 挂在 /qtcloud-media/ 子路径下，base-href 必须对齐
-      - name: build web
-        working-directory: src/studio
-        run: flutter build web --release --base-href /qtcloud-media/
-      - uses: actions/upload-pages-artifact@v3
+          cache: true
+
+      - run: flutter pub get
+      - name: Format
+        run: dart format --set-exit-if-changed --output=none .
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
+
+  build-and-deploy:
+    name: Build Flutter Web & Deploy to OSS
+    needs: quality-gates
+    if: startsWith(github.ref, 'refs/tags/studio/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
         with:
-          path: src/studio/build/web
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          flutter-version: '3.44.9'
+          cache: true
+
+      - run: cd src/studio && flutter pub get
+      - run: cd src/studio && flutter build web
+
+      - uses: manyuanrong/setup-ossutil@v3.0
+        with:
+          endpoint: oss-cn-hangzhou.aliyuncs.com
+          access-key-id: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+          access-key-secret: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+
+      # 静态资源长缓存：内容按版本变化，文件名带 hash
+      - run: ossutil cp src/studio/build/web/ oss://qtcloud-media-studio/ -r -f --meta=Cache-Control:public,max-age=31536000
+
+      # 元信息与入口文件单独 no-cache：长缓存会导致浏览器拿不到新版
+      - run: ossutil cp src/studio/build/web/manifest.json oss://qtcloud-media-studio/manifest.json -f --meta=Cache-Control:no-cache
+      - run: ossutil cp src/studio/build/web/index.html oss://qtcloud-media-studio/index.html -f --meta=Cache-Control:no-cache
+      - run: ossutil cp src/studio/build/web/flutter_bootstrap.js oss://qtcloud-media-studio/flutter_bootstrap.js -f --meta=Cache-Control:no-cache
+
+      - name: Refresh CDN
+        run: |
+          pip install aliyun-python-sdk-cdn
+          python -c "
+          from aliyunsdkcore.client import AcsClient
+          from aliyunsdkcdn.request.v20180510.RefreshObjectCachesRequest import RefreshObjectCachesRequest
+          import os
+          cli = AcsClient(os.environ['ALIYUN_ACCESS_KEY_ID'], os.environ['ALIYUN_ACCESS_KEY_SECRET'], 'cn-hangzhou')
+          for domain in ['studio.media.cloud.quanttide.com']:
+              req = RefreshObjectCachesRequest()
+              req.set_ObjectPath(f'https://{domain}/')
+              req.set_ObjectType('Directory')
+              cli.do_action_with_exception(req)
+          "
+        env:
+          ALIYUN_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+          ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}

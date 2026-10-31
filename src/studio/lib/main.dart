@@ -115,18 +115,18 @@ class _StudioPageState extends State<StudioPage> {
   Future<void> _copy() async {
     await copyRich(_html, _controller.text);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已复制。到公众号编辑器直接粘贴，排版会保留。')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已复制。到公众号编辑器直接粘贴，排版会保留。')));
   }
 
   Future<void> _openDraft(String name) async {
     final content = await readDraft(name);
     if (!mounted) return;
     if (content == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('草稿读取失败：$name')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('草稿读取失败：$name')));
       return;
     }
     setState(() {
@@ -151,10 +151,13 @@ class _StudioPageState extends State<StudioPage> {
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(context), child: const Text('取消')),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
             FilledButton(
-                onPressed: () => Navigator.pop(context, controller.text.trim()),
-                child: const Text('保存')),
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('保存'),
+            ),
           ],
         ),
       );
@@ -179,9 +182,7 @@ class _StudioPageState extends State<StudioPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_draftName == null
-            ? '量潮媒体云工作台'
-            : '量潮媒体云工作台 · $_draftName'),
+        title: Text(_draftName == null ? '量潮媒体云工作台' : '量潮媒体云工作台 · $_draftName'),
         actions: [
           PopupMenuButton<String>(
             tooltip: '打开草稿',
@@ -189,10 +190,15 @@ class _StudioPageState extends State<StudioPage> {
             onSelected: _openDraft,
             onOpened: _refreshDrafts,
             itemBuilder: (context) => _draftNames.isEmpty
-                ? const [PopupMenuItem<String>(enabled: false, child: Text('（暂无草稿）'))]
+                ? const [
+                    PopupMenuItem<String>(
+                      enabled: false,
+                      child: Text('（暂无草稿）'),
+                    ),
+                  ]
                 : _draftNames
-                    .map((n) => PopupMenuItem(value: n, child: Text(n)))
-                    .toList(),
+                      .map((n) => PopupMenuItem(value: n, child: Text(n)))
+                      .toList(),
           ),
           IconButton(
             tooltip: '保存草稿',
@@ -227,9 +233,7 @@ class _StudioPageState extends State<StudioPage> {
             ),
           ),
           const VerticalDivider(width: 1),
-          Expanded(
-            child: ClipRect(child: buildPreview(_blocks, _theme)),
-          ),
+          Expanded(child: ClipRect(child: buildPreview(_blocks, _theme))),
         ],
       ),
     );
