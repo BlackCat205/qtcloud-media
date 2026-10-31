@@ -27,5 +27,6 @@ description: 用 qtcloud-media CLI 把 Markdown 文章排版并推进微信公�
 - **不是群发**：本技能只到草稿箱为止，群发由人在后台完成
 - 封面若用占位图，报告时提醒用户替换
 - 建稿遇微信侧瞬时 `40007` 已由 CLI 自动退避重试，无需人工干预；重试三次仍失败才报错
+- 草稿名二次 publish 自动走 `draft/update` 更新同一篇（meta 里的 media_id）；微信接口不对称：update 的 `articles` 是单对象、add 才是数组，传错报 47001，CLI 已处理
 - 标题只进草稿 title 字段，正文不重复标题；改标题改 `--title` 参数即可
 - 定时发布、摘要微调在公众号后台完成，CLI 不做

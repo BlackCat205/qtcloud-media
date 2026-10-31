@@ -163,11 +163,14 @@ impl Wechat {
     }
 
     /// 更新草稿箱中的同一篇草稿（接力场景：二次 publish 不新建）。
+    ///
+    /// 注意微信接口不对称：draft/update 的 `articles` 是单个文章对象，
+    /// 而 draft/add 是数组——传数组会报 47001 data format error。
     pub fn update_draft(&self, media_id: &str, article: Article) -> Result<String> {
         let req = serde_json::json!({
             "media_id": media_id,
             "index": 0,
-            "articles": [article],
+            "articles": article,
         });
         let url = format!("{API}/cgi-bin/draft/update?access_token={}", self.token);
         let body = self
