@@ -1,0 +1,41 @@
+name: deploy-studio
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/studio/**'
+      - '.github/workflows/deploy-studio.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.44.9'
+      # Pages 挂在 /qtcloud-media/ 子路径下，base-href 必须对齐
+      - name: build web
+        working-directory: src/studio
+        run: flutter build web --release --base-href /qtcloud-media/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: src/studio/build/web
+      - id: deployment
+        uses: actions/deploy-pages@v4

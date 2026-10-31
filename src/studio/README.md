@@ -9,17 +9,18 @@
 | 平台 | 预览 | 富文本复制 |
 |------|------|-----------|
 | Web | iframe（`preview_web.dart`） | ClipboardItem 写 text/html（`web/index.html` 的 `copyRichText`） |
+| Windows | 同 Linux（Widget 渲染，CI 打包） | 同 Linux（GTK 通道；随下次发版首验） |
 | Linux 桌面 | Flutter Widget 按块模型渲染（`preview_desktop.dart`） | GTK 剪贴板双 target：UTF8_STRING + text/html（`linux/runner/my_application.cc`，通道 `qtcloud_media/clipboard`） |
 
 两平台共用 `lib/md.dart` 的同一套解析与样式参数（与 CLI render 同规则：无 `<style>`、无 class、开头 H1 不进正文）。
 
 ## 运行 / 安装
 
-```bash
-# Web
-flutter pub get && flutter run -d web-server --web-port 8080
+- 网页版：https://quanttide.github.io/qtcloud-media/ （浏览器打开即用，push main 自动部署）
+- Windows：发版时在 [Releases](../../releases) 下载 `studio-<版本>-windows-x64.zip`，解压运行 `Release/qtcloud_media_studio.exe`（CI 打包，首验随下次发版）
+- Linux 桌面（本机安装）：
 
-# Linux 桌面
+```bash
 flutter build linux
 cp -r build/linux/x64/release/bundle ~/.local/opt/qtcloud-media-studio
 ln -sf ~/.local/opt/qtcloud-media-studio/qtcloud_media_studio ~/.local/bin/qtcloud-media-studio

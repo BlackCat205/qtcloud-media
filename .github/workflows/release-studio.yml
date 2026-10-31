@@ -1,0 +1,90 @@
+name: release-studio
+on:
+  push:
+    tags:
+      - 'studio/*'
+
+jobs:
+  check:
+    if: startsWith(github.ref, 'refs/tags/studio/')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: extract version from tag
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#studio/}" >> $GITHUB_OUTPUT
+      - name: validate version matches pubspec and changelog
+        run: |
+          V="${{ steps.version.outputs.value }}"
+          grep -q "^version: ${V}$" src/studio/pubspec.yaml || { echo "pubspec 版本与标签不一致"; exit 1; }
+          grep -q "^## \[${V}\]" src/studio/CHANGELOG.md || { echo "CHANGELOG 缺 ${V} 小节"; exit 1; }
+
+  build-linux-web:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.44.9'
+      - name: build web
+        working-directory: src/studio
+        run: flutter build web --release
+      - name: build linux
+        working-directory: src/studio
+        run: flutter build linux --release
+      - name: package
+        working-directory: src/studio
+        run: |
+          V="${{ needs.check.outputs.version }}"
+          cd build
+          tar czf "../studio-${V}-linux-x64.tar.gz" linux/x64/release/bundle
+          cd web && zip -qr "../../studio-${V}-web.zip" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-linux-web
+          path: |
+            src/studio/studio-*.tar.gz
+            src/studio/studio-*-web.zip
+
+  build-windows:
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.44.9'
+      - name: build windows
+        working-directory: src/studio
+        run: flutter build windows --release
+      - name: package
+        shell: pwsh
+        working-directory: src/studio
+        run: |
+          $v = "${{ needs.check.outputs.version }}"
+          Compress-Archive -Path build/windows/x64/runner/Release -DestinationPath "studio-$v-windows-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-windows
+          path: src/studio/studio-*-windows-x64.zip
+
+  release:
+    needs: [check, build-linux-web, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: studio ${{ needs.check.outputs.version }}
+          files: dist/*

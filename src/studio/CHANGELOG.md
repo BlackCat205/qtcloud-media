@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### 新增
+
+- 网页托管：GitHub Pages（`deploy-studio.yml`，push main 自动构建部署 `quanttide.github.io/qtcloud-media`）
+- Windows 打包：`release-studio.yml` 发版时出 windows-x64 zip（随下次发版首验）
+
 ## [0.1.1] - 2026-10-31
 
 ### 新增
