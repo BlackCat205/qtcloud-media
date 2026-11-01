@@ -13,7 +13,11 @@ final _iframe = web.HTMLIFrameElement()
   );
 var _registered = false;
 
-Widget buildPreview(List<Block> blocks, ThemeStyles theme) {
+Widget buildPreview(
+  List<Block> blocks,
+  ThemeStyles theme, {
+  String? title,
+}) {
   if (!_registered) {
     _registered = true;
     ui_web.platformViewRegistry.registerViewFactory(
@@ -24,7 +28,7 @@ Widget buildPreview(List<Block> blocks, ThemeStyles theme) {
   _iframe.setAttribute(
     'srcdoc',
     '<!doctype html><html><head><meta charset="utf-8"></head>'
-        '<body style="margin:16px;">${articleHtml(blocks, theme)}</body></html>',
+        '<body style="margin:16px;">${articleHtml(blocks, theme, title: title)}</body></html>',
   );
   return const HtmlElementView(viewType: 'qtcloud-preview');
 }

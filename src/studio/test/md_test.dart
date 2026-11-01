@@ -3,11 +3,34 @@ import 'package:qtcloud_media_studio/md.dart';
 import 'package:qtcloud_media_studio/theme.dart';
 
 void main() {
-  test('开头 H1 不进正文，后续 H1 保留', () {
-    final html = renderArticle('# 标题\n\n正文。\n\n# 文中标题\n');
-    expect(html, isNot(contains('>标题<')));
+  test('标题规则 1：YAML title 优先于正文 #', () {
+    final a = parseArticle('---\ntitle: YAML 标题\n---\n\n正文。\n\n# 文中标题\n');
+    expect(a.title, 'YAML 标题');
+    final html = articleHtml(a.blocks, ThemeStyles(), title: a.title);
+    expect(html, contains('YAML 标题'));
     expect(html, contains('正文。'));
-    expect(html, contains('文中标题'));
+    expect(html, contains('文中标题')); // body H1 保留正文地位
+    // front matter 不进正文
+    expect(html, isNot(contains('title:')));
+  });
+
+  test('标题规则 2：无 YAML 且唯一 H1 是标题，不进正文', () {
+    final a = parseArticle('# 文章标题\n\n正文。\n');
+    expect(a.title, '文章标题');
+    final bodyHtml = blocksToHtml(a.blocks, ThemeStyles());
+    expect(bodyHtml, isNot(contains('文章标题'))); // 正文不含标题
+    final html = articleHtml(a.blocks, ThemeStyles(), title: a.title);
+    expect(html, contains('>文章标题<')); // 预览顶部渲染标题
+    expect(html, contains('正文。'));
+  });
+
+  test('标题规则 3：多个 H1 都不是标题，都留正文', () {
+    final a = parseArticle('# 一\n\n正文。\n\n# 二\n');
+    expect(a.title, isNull);
+    final html = articleHtml(a.blocks, ThemeStyles());
+    expect(html, contains('>一<'));
+    expect(html, contains('>二<'));
+    expect(html, contains('正文。'));
   });
 
   test('全内联样式：无 style 块、无 class', () {

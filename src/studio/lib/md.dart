@@ -1,9 +1,15 @@
 /// Markdown 解析与公众号 HTML 渲染。
 ///
-/// 解析产物为块模型（[Block]），供两处消费：
+/// 解析产物为标题 + 块模型（[ArticleSource]），供三处消费：
 /// - HTML 渲染（[blocksToHtml]）：逐元素内联样式，与 CLI render 同规则：
-///   无 <style> 块、无 class、开头 H1 不进正文
+///   无 <style> 块、无 class
 /// - 桌面预览：按块模型直接构建 Flutter Widget（见 preview_desktop.dart）
+///
+/// 标题规则（唯一判据，编辑/预览/推送三处同源）：
+/// 1. YAML front matter 的 `title:` 优先于正文 `#`
+/// 2. 无 YAML 标题且正文恰好一个 H1 → 该 H1 是标题，不进正文
+/// 3. 多个 H1 → 都不是标题，都留正文
+/// front matter 本身是配置，永远不进正文。
 library;
 
 import 'theme.dart';
@@ -16,7 +22,7 @@ sealed class Block {
 
 class HeadingBlock extends Block {
   const HeadingBlock(this.level, this.inlines);
-  final int level; // 2..4（开头 H1 已在解析时丢弃，文中 H1 归为 1）
+  final int level; // 1..4（作为标题的 H1 已在解析时剔除，其余 H1 归为 1）
   final List<Inline> inlines;
 }
 
@@ -129,13 +135,66 @@ bool _isSpecial(String l) =>
     RegExp(r'^\d+\.\s').hasMatch(l) ||
     l.trim() == '---';
 
-/// 解析 Markdown 为块模型。开头 H1 是文章标题，标题由草稿 title 字段
-/// 承载，不进正文。
-List<Block> parseMarkdown(String markdown) {
+/// 解析结果：标题 + 正文块。
+class ArticleSource {
+  const ArticleSource(this.title, this.blocks);
+  final String? title;
+  final List<Block> blocks;
+}
+
+/// 拆 front matter：返回 (yaml 标题, 正文)。没有 front matter 时标题为 null。
+(String?, String) _splitFrontMatter(String markdown) {
+  final lines = markdown.replaceAll('\r\n', '\n').split('\n');
+  if (lines.isEmpty || lines.first.trim() != '---') {
+    return (null, lines.join('\n'));
+  }
+  var end = -1;
+  for (var j = 1; j < lines.length; j++) {
+    if (lines[j].trim() == '---') {
+      end = j;
+      break;
+    }
+  }
+  if (end == -1) return (null, lines.join('\n'));
+  String? title;
+  for (final l in lines.sublist(1, end)) {
+    final m = RegExp(r'^title:\s*(.*)$').firstMatch(l.trim());
+    if (m != null) {
+      title = m
+          .group(1)!
+          .trim()
+          .replaceAll(RegExp(r'''^["\']'''), '')
+          .replaceAll(RegExp(r'''["\']$'''), '');
+      break;
+    }
+  }
+  return (title, lines.sublist(end + 1).join('\n'));
+}
+
+/// 解析 Markdown 为标题 + 块模型，标题规则见库注释。
+ArticleSource parseArticle(String markdown) {
+  final (yamlTitle, body) = _splitFrontMatter(markdown);
+  final lines = body.split('\n');
+  final h1 = [
+    for (var k = 0; k < lines.length; k++)
+      if (lines[k].startsWith('# ')) k,
+  ];
+  var title = yamlTitle;
+  if (title == null && h1.length == 1) {
+    title = lines[h1.single].substring(2).trim();
+    lines.removeAt(h1.single);
+  }
+  return ArticleSource(title, _parseBlocks(lines.join('\n')));
+}
+
+/// 解析 Markdown 为正文块（标题已按规则剔除，仅正文）。
+List<Block> parseMarkdown(String markdown) =>
+    parseArticle(markdown).blocks;
+
+List<Block> _parseBlocks(String markdown) {
   final lines = markdown.replaceAll('\r\n', '\n').split('\n');
   final blocks = <Block>[];
   var i = 0;
-  var firstBlock = true;
 
   while (i < lines.length) {
     final line = lines[i];
@@ -153,16 +212,12 @@ List<Block> parseMarkdown(String markdown) {
       }
       if (i < lines.length) i++;
       blocks.add(CodeBlockText(code.join('\n')));
-      firstBlock = false;
       continue;
     }
 
     if (line.startsWith('# ')) {
-      if (!firstBlock) {
-        blocks.add(HeadingBlock(1, parseInline(line.substring(2))));
-      }
+      blocks.add(HeadingBlock(1, parseInline(line.substring(2))));
       i++;
-      firstBlock = false;
       continue;
     }
 
@@ -175,14 +230,12 @@ List<Block> parseMarkdown(String markdown) {
         ),
       );
       i++;
-      firstBlock = false;
       continue;
     }
 
     if (line.trim() == '---') {
       blocks.add(const RuleBlock());
       i++;
-      firstBlock = false;
       continue;
     }
 
@@ -199,7 +252,6 @@ List<Block> parseMarkdown(String markdown) {
         i++;
       }
       blocks.add(ListBlock(ordered, items));
-      firstBlock = false;
       continue;
     }
 
@@ -210,7 +262,6 @@ List<Block> parseMarkdown(String markdown) {
         i++;
       }
       blocks.add(QuoteBlock(paras));
-      firstBlock = false;
       continue;
     }
 
@@ -223,7 +274,6 @@ List<Block> parseMarkdown(String markdown) {
       i++;
     }
     blocks.add(ParagraphBlock(parseInline(para.join('\n'))));
-    firstBlock = false;
   }
   return blocks;
 }
@@ -278,14 +328,26 @@ String blockToHtml(Block block, ThemeStyles t) {
   };
 }
 
+/// 标题 HTML（预览用：标题渲染在顶部，不进正文体）。
+String titleHtml(String title, ThemeStyles t) =>
+    '<h1 style="${t.headingStyle(t.h1Size)}">${escapeHtml(title)}</h1>';
+
 /// 块列表 → 正文 HTML（不含外层 section）。
 String blocksToHtml(List<Block> blocks, ThemeStyles t) =>
     blocks.map((b) => blockToHtml(b, t)).join();
 
-/// 块列表 → 完整文章片段（含外层 section）。
-String articleHtml(List<Block> blocks, ThemeStyles t) =>
-    '<section style="${t.wrapperStyle}">${blocksToHtml(blocks, t)}</section>';
+/// 块列表 → 完整文章片段（含标题与外层 section）。推送正文由调用方
+/// 只取 [blocksToHtml]——公众号标题是独立字段，不进 content。
+String articleHtml(
+  List<Block> blocks,
+  ThemeStyles t, {
+  String? title,
+}) => '<section style="${t.wrapperStyle}">'
+    '${title == null ? '' : titleHtml(title, t)}'
+    '${blocksToHtml(blocks, t)}</section>';
 
-/// 渲染整篇文章为公众号草稿 content 片段（内置默认主题）。
-String renderArticle(String markdown) =>
-    articleHtml(parseMarkdown(markdown), ThemeStyles());
+/// 渲染整篇文章为预览 HTML（内置默认主题，含标题）。
+String renderArticle(String markdown) {
+  final a = parseArticle(markdown);
+  return articleHtml(a.blocks, ThemeStyles(), title: a.title);
+}

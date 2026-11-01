@@ -172,6 +172,7 @@ class _ArticlePageState extends State<ArticlePage> {
   List<Block> _blocks = const [];
   ThemeStyles _theme = const ThemeStyles();
   String _html = '';
+  String? _title;
   String? _draftName;
   List<String> _draftNames = const [];
   RemoteSettings? _remote;
@@ -213,8 +214,10 @@ class _ArticlePageState extends State<ArticlePage> {
   }
 
   void _reparse() {
-    _blocks = parseMarkdown(_controller.text);
-    _html = articleHtml(_blocks, _theme);
+    final article = parseArticle(_controller.text);
+    _title = article.title;
+    _blocks = article.blocks;
+    _html = articleHtml(_blocks, _theme, title: _title);
   }
 
   void _onChanged() {
@@ -228,7 +231,15 @@ class _ArticlePageState extends State<ArticlePage> {
   Future<void> _publishRemote() async {
     final r = _remote;
     if (r == null) return;
-    final title = _draftName ?? '未命名';
+    final title = _title ?? _draftName;
+    if (title == null || title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('先定标题：正文写唯一一行一级标题，或开头 YAML 写 title:'),
+        ),
+      );
+      return;
+    }
     try {
       final result = await publishRemote(
         provider: r.provider,
@@ -274,7 +285,7 @@ class _ArticlePageState extends State<ArticlePage> {
   }
 
   Future<void> _saveDraftAs() async {
-    final controller = TextEditingController();
+    final controller = TextEditingController(text: _title ?? '');
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -445,7 +456,9 @@ class _ArticlePageState extends State<ArticlePage> {
                       ),
                       const VerticalDivider(width: 1),
                       Expanded(
-                        child: ClipRect(child: buildPreview(_blocks, _theme)),
+                        child: ClipRect(
+                          child: buildPreview(_blocks, _theme, title: _title),
+                        ),
                       ),
                     ],
                   ),

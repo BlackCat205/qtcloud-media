@@ -7,5 +7,9 @@ import 'package:flutter/material.dart';
 import 'md.dart';
 import 'theme.dart';
 
-Widget buildPreview(List<Block> blocks, ThemeStyles theme) =>
+Widget buildPreview(
+  List<Block> blocks,
+  ThemeStyles theme, {
+  String? title,
+}) =>
     const SizedBox.expand(child: Center(child: Text('当前平台不支持预览')));

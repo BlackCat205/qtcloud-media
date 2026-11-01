@@ -4,9 +4,28 @@ import 'md.dart';
 import 'theme.dart';
 
 /// 桌面预览：按块模型直接构建 Widget，样式参数与公众号 HTML 同一份主题。
-Widget buildPreview(List<Block> blocks, ThemeStyles theme) => ListView(
+Widget buildPreview(
+  List<Block> blocks,
+  ThemeStyles theme, {
+  String? title,
+}) => ListView(
   padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-  children: [for (final b in blocks) _blockWidget(b, theme)],
+  children: [
+    if (title != null)
+      Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: theme.h1Size,
+            height: 1.4,
+            color: _hex(theme.headingColor),
+            fontWeight: _weight(theme.headingWeight),
+          ),
+        ),
+      ),
+    for (final b in blocks) _blockWidget(b, theme),
+  ],
 );
 
 FontWeight _weight(double w) => switch (w.round()) {
