@@ -15,6 +15,7 @@ import 'preview.dart'
 import 'remote.dart'
     if (dart.library.js_interop) 'remote_web.dart'
     if (dart.library.io) 'remote_io.dart';
+import 'settings.dart';
 import 'theme.dart';
 import 'theme_loader.dart'
     if (dart.library.js_interop) 'theme_loader_web.dart'
@@ -55,19 +56,97 @@ class StudioApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF07C160)),
         useMaterial3: true,
       ),
-      home: const StudioPage(),
+      home: const StudioShell(),
     );
   }
 }
 
-class StudioPage extends StatefulWidget {
-  const StudioPage({super.key});
+/// 侧边导航壳：文章（现编辑页）/ 图文、视频（预留）/ 设置。
+class StudioShell extends StatefulWidget {
+  const StudioShell({super.key});
 
   @override
-  State<StudioPage> createState() => _StudioPageState();
+  State<StudioShell> createState() => _StudioShellState();
 }
 
-class _StudioPageState extends State<StudioPage> {
+class _StudioShellState extends State<StudioShell> {
+  int _index = 0;
+  final _articleKey = GlobalKey<_ArticlePageState>();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          NavigationRail(
+            selectedIndex: _index,
+            onDestinationSelected: (i) {
+              setState(() => _index = i);
+              // 从设置页切回文章页时重读服务端连接设置，保证推送用最新值
+              if (i == 0) _articleKey.currentState?.reloadRemote();
+            },
+            labelType: NavigationRailLabelType.all,
+            destinations: const [
+              NavigationRailDestination(
+                icon: Icon(Icons.article_outlined),
+                label: Text('文章'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.image_outlined),
+                label: Text('图文'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.videocam_outlined),
+                label: Text('视频'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.settings_outlined),
+                label: Text('设置'),
+              ),
+            ],
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: IndexedStack(
+              index: _index,
+              children: [
+                ArticlePage(key: _articleKey),
+                const PlaceholderPage(title: '图文'),
+                const PlaceholderPage(title: '视频'),
+                const SettingsPage(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 预留分区页：图文、视频尚未开发。
+class PlaceholderPage extends StatelessWidget {
+  const PlaceholderPage({super.key, required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: const Center(child: Text('规划中')),
+    );
+  }
+}
+
+class ArticlePage extends StatefulWidget {
+  const ArticlePage({super.key});
+
+  @override
+  State<ArticlePage> createState() => _ArticlePageState();
+}
+
+class _ArticlePageState extends State<ArticlePage> {
   final _controller = TextEditingController(text: sampleMarkdown);
   Timer? _debounce;
   List<Block> _blocks = const [];
@@ -92,6 +171,9 @@ class _StudioPageState extends State<StudioPage> {
     if (!mounted) return;
     setState(() => _remote = s);
   }
+
+  /// 供导航壳调用：从设置页切回文章页时重读服务端连接。
+  void reloadRemote() => _loadRemote();
 
   Future<void> _refreshDrafts() async {
     final names = await listDrafts();
@@ -144,72 +226,6 @@ class _StudioPageState extends State<StudioPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('远程推送失败：$e')));
-    }
-  }
-
-  Future<void> _editRemote() async {
-    final providerCtrl = TextEditingController(
-      text: _remote?.provider ?? 'http://127.0.0.1:8787',
-    );
-    String? account = _remote?.account;
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('远程设置（provider）'),
-          content: SizedBox(
-            width: 360,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: providerCtrl,
-                  decoration: const InputDecoration(labelText: 'provider 地址'),
-                ),
-                const SizedBox(height: 12),
-                FutureBuilder<List<String>>(
-                  future: listAccounts(providerCtrl.text.trim()),
-                  builder: (context, snap) => DropdownButtonFormField<String>(
-                    initialValue: (snap.data?.contains(account) ?? false)
-                        ? account
-                        : null,
-                    hint: Text(
-                      snap.connectionState == ConnectionState.waiting
-                          ? '读取账号中…'
-                          : (snap.data?.isEmpty ?? true)
-                          ? '（provider 侧暂无账号）'
-                          : '选择账号',
-                    ),
-                    items: (snap.data ?? [])
-                        .map((a) => DropdownMenuItem(value: a, child: Text(a)))
-                        .toList(),
-                    onChanged: (v) => setState(() => account = v),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (saved == true) {
-      final s = RemoteSettings(
-        provider: providerCtrl.text.trim(),
-        account: account ?? '',
-      );
-      await saveSettings(s);
-      if (!mounted) return;
-      setState(() => _remote = s);
     }
   }
 
@@ -312,11 +328,6 @@ class _StudioPageState extends State<StudioPage> {
               onPressed: _publishRemote,
               icon: const Icon(Icons.cloud_upload),
             ),
-          IconButton(
-            tooltip: '远程设置（provider）',
-            onPressed: _editRemote,
-            icon: const Icon(Icons.cloud),
-          ),
           const SizedBox(width: 4),
           FilledButton.icon(
             onPressed: _copy,
