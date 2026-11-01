@@ -5,6 +5,7 @@
 ### 变更
 
 - base64 封面按魔数字节嗅探类型（png/jpg/gif/webp），不再假定 png
+- 新增 GET /articles 与 GET /articles/{id}（历史文章，query：account、source=draft|publish；draft 缺省走草稿箱，publish 走发布能力）
 
 ## [0.1.0] - 2026-10-31
 

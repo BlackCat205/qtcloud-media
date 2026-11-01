@@ -40,7 +40,17 @@
 
 配套行为：front matter 本身是配置永远不进正文；预览把解析出的标题渲染在顶部；推送用标题做 title 参数，没标题拦下提示先定标题；「存为新草稿」默认拿标题当草稿名。
 
-已知分叉：CLI render 与 provider 仍是旧规则（无条件跳过开头 H1），多 H1 文档两边结果不一致，待同步（涉及发版）。
+已统一：CLI（`render.rs` 的 `split_title`）与 studio（`md.dart` 的 `parseArticle`）是同一条判据，provider 复用 CLI 引擎自然同源；CLI `publish --title` 可缺省（按规则从正文解析，解析不出才报错）。
+
+## 历史文章
+
+CLI `history` 命令，经 provider 取公众号历史文章：
+
+- `qtcloud-media history list --account <名>`：列出历史文章（时间、标题、id）
+- `qtcloud-media history get <id> --account <名> -o xx.md`：取回一篇转成 Markdown，标题写入 YAML front matter——改完直接 publish，标题规则第 1 条天然生效
+- 双通道：`--source draft`（缺省）走草稿箱——发布过的文章正本都留在草稿箱；`--source publish` 走发布能力（freepublish），需账号有该权限，未授权报 48001
+- provider 侧：GET /articles、GET /articles/{id}（query：account、source）
+- 注意：取回的文中图片仍是原文链接，重新发布前需重传（`history get` 会提示）
 
 ## 预留分区
 

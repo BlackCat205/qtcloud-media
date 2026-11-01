@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
@@ -59,6 +59,8 @@ pub fn router(state: AppState) -> Router {
         .route("/themes", get(list_themes))
         .route("/themes/{name}", get(get_theme).put(put_theme))
         .route("/records", get(list_records))
+        .route("/articles", get(list_articles))
+        .route("/articles/{id}", get(get_article))
         .with_state(Arc::new(state))
 }
 
@@ -457,6 +459,106 @@ async fn list_records(
     Ok(Json(records))
 }
 
+// ── 历史文章（微信 freepublish 发布能力）──────────────────────────
+
+#[derive(Deserialize)]
+pub struct AccountQuery {
+    pub account: String,
+}
+
+#[derive(Deserialize)]
+pub struct ArticleQuery {
+    pub account: String,
+    /// 通道：draft（缺省）/ publish；draft 时 id 为 media_id，publish 时为 article_id
+    #[serde(default)]
+    pub source: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ArticlesQuery {
+    pub account: String,
+    /// 通道：draft＝草稿箱（缺省，历史文章的草稿正本），publish＝已发布（需账号有发布能力）
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub offset: u32,
+    #[serde(default = "default_count")]
+    pub count: u32,
+}
+
+fn default_count() -> u32 {
+    10
+}
+
+/// 按通道取历史文章：draft 走草稿箱，publish 走 freepublish（未授权账号报 48001）。
+fn fetch_history(
+    account: &Account,
+    source: Option<&str>,
+    offset: u32,
+    count: u32,
+) -> Result<(Vec<qtcloud_media_cli::wechat::PubArticle>, u64)> {
+    use qtcloud_media_cli::wechat::Wechat;
+
+    let wechat = Wechat::authorize(&account.app_id, &account.app_secret)?;
+    match source.unwrap_or("draft") {
+        "publish" => wechat.freepublish_list(offset, count),
+        _ => wechat.draft_list(offset, count),
+    }
+}
+
+#[derive(Serialize)]
+pub struct ArticleSummary {
+    pub article_id: String,
+    pub title: String,
+    pub digest: String,
+    pub publish_time: u64,
+    pub url: String,
+}
+
+async fn list_articles(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<ArticlesQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let account = load_account(&state, &q.account)?;
+    let source = q.source.clone();
+    let (items, total) = tokio::task::spawn_blocking(move || {
+        fetch_history(&account, source.as_deref(), q.offset, q.count)
+    })
+    .await
+    .context("history 任务失败")??;
+    let items: Vec<ArticleSummary> = items
+        .into_iter()
+        .map(|a| ArticleSummary {
+            article_id: a.article_id,
+            title: a.title,
+            digest: a.digest,
+            publish_time: a.publish_time,
+            url: a.url,
+        })
+        .collect();
+    Ok(Json(serde_json::json!({ "total": total, "items": items })))
+}
+
+async fn get_article(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Query(q): Query<ArticleQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let account = load_account(&state, &q.account)?;
+    let article = tokio::task::spawn_blocking(move || {
+        use qtcloud_media_cli::wechat::Wechat;
+
+        let wechat = Wechat::authorize(&account.app_id, &account.app_secret)?;
+        match q.source.as_deref().unwrap_or("draft") {
+            "publish" => wechat.freepublish_get(&id),
+            _ => wechat.draft_get(&id),
+        }
+    })
+    .await
+    .context("history 任务失败")??;
+    Ok(Json(serde_json::to_value(article)?))
+}
+
 async fn health() -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": "ok",
@@ -592,6 +694,22 @@ mod tests {
         let html = v["html"].as_str().unwrap();
         assert!(html.contains("正文段落"));
         assert!(!html.contains("<h1"), "首段 H1 不应进正文（公众号规则）");
+    }
+
+    #[tokio::test]
+    async fn articles_require_account() {
+        let (_tmp, state) = setup();
+        let app = router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/articles?account=missing")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

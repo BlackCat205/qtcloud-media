@@ -44,9 +44,9 @@ enum Cmd {
         /// 主题：文件路径或名称（名称按 XDG 查 `<data|config>/themes/<name>.toml`），缺省用内置默认主题
         #[arg(long)]
         theme: Option<String>,
-        /// 文章标题
+        /// 文章标题，缺省按标题规则从正文解析（YAML title / 唯一一级标题）
         #[arg(long)]
-        title: String,
+        title: Option<String>,
         /// 封面：本地图片路径或已有 thumb_media_id
         #[arg(long)]
         thumb: String,
@@ -69,6 +69,11 @@ enum Cmd {
         #[arg(long)]
         account: Option<String>,
     },
+    /// 历史文章：从公众号拉取已发布文章（经 provider，账号托管在服务端）
+    History {
+        #[command(subcommand)]
+        cmd: HistoryCmd,
+    },
     /// 技能管理：列出 / 安装内嵌的 agent 技能文件
     Skills {
         #[command(subcommand)]
@@ -89,6 +94,45 @@ enum DraftCmd {
     New { name: String },
     /// 查看草稿：正文路径与 meta 状态
     Show { name: String },
+}
+
+#[derive(Subcommand)]
+enum HistoryCmd {
+    /// 列出已发布文章（发布时间、标题、article_id）
+    List {
+        /// provider 地址，缺省取环境变量 QTCLOUD_MEDIA_PROVIDER，再缺省 http://127.0.0.1:8787
+        #[arg(long)]
+        provider: Option<String>,
+        /// provider 侧托管的账号名
+        #[arg(long)]
+        account: Option<String>,
+        /// 通道：draft＝草稿箱（缺省，历史文章的草稿正本），publish＝已发布（需账号有发布能力）
+        #[arg(long)]
+        source: Option<String>,
+        /// 本页条数
+        #[arg(long, default_value_t = 10)]
+        count: u32,
+        /// 分页偏移
+        #[arg(long, default_value_t = 0)]
+        offset: u32,
+    },
+    /// 拉取一篇历史文章为 Markdown（标题写入 YAML front matter，正文按标题规则拆好）
+    Get {
+        /// 文章 ID（history list 输出）
+        article_id: String,
+        /// 输出 Markdown 文件，缺省 <article_id>.md
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// provider 地址，缺省取环境变量 QTCLOUD_MEDIA_PROVIDER，再缺省 http://127.0.0.1:8787
+        #[arg(long)]
+        provider: Option<String>,
+        /// provider 侧托管的账号名
+        #[arg(long)]
+        account: Option<String>,
+        /// 通道：draft＝草稿箱（缺省），publish＝已发布；draft 时 id 为 media_id，publish 时为 article_id
+        #[arg(long)]
+        source: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -137,6 +181,17 @@ pub fn run() -> Result<()> {
             account,
         } => {
             let input = drafts::resolve_input(&markdown)?;
+            // 标题：--title 显式给出优先，否则按标题规则从正文解析
+            let title = match title {
+                Some(t) => t,
+                None => {
+                    let text = std::fs::read_to_string(input.path())
+                        .with_context(|| format!("读取正文失败：{}", input.path().display()))?;
+                    crate::render::split_title(&text).0.context(
+                        "正文解析不出标题：用 --title 明确给出，或正文含唯一一行一级标题 / YAML front matter 的 title:",
+                    )?
+                }
+            };
             if remote {
                 return publish_remote(
                     &input,
@@ -195,6 +250,95 @@ pub fn run() -> Result<()> {
             }
             Ok(())
         }
+        Cmd::History { cmd } => match cmd {
+            HistoryCmd::List {
+                provider,
+                account,
+                source,
+                count,
+                offset,
+            } => {
+                let base = provider_base(provider.as_deref());
+                let account = resolve_account(account.as_deref())?;
+                let source = source.unwrap_or_else(|| "draft".to_string());
+                let client = reqwest::blocking::Client::new();
+                let resp = client
+                    .get(format!("{base}/articles"))
+                    .query(&[
+                        ("account", account.as_str()),
+                        ("source", source.as_str()),
+                        ("offset", &offset.to_string()),
+                        ("count", &count.to_string()),
+                    ])
+                    .send()
+                    .with_context(|| format!("调用 provider 失败：{base}（服务起来了吗？）"))?;
+                if !resp.status().is_success() {
+                    bail!("provider 返回错误：{}", resp.text().unwrap_or_default());
+                }
+                let v: serde_json::Value = resp.json().context("解析 provider 响应失败")?;
+                let total = v["total"].as_u64().unwrap_or_default();
+                let items = v["items"].as_array().cloned().unwrap_or_default();
+                println!(
+                    "共 {total} 篇（本页 {}，offset {offset}，账号 {account}）",
+                    items.len()
+                );
+                for it in &items {
+                    println!(
+                        "{}\t{}\t{}",
+                        it["publish_time"].as_u64().unwrap_or_default(),
+                        it["title"].as_str().unwrap_or(""),
+                        it["article_id"].as_str().unwrap_or("")
+                    );
+                }
+                Ok(())
+            }
+            HistoryCmd::Get {
+                article_id,
+                output,
+                provider,
+                account,
+                source,
+            } => {
+                let base = provider_base(provider.as_deref());
+                let account = resolve_account(account.as_deref())?;
+                let source = source.unwrap_or_else(|| "draft".to_string());
+                let client = reqwest::blocking::Client::new();
+                let resp = client
+                    .get(format!("{base}/articles/{article_id}"))
+                    .query(&[("account", account.as_str()), ("source", source.as_str())])
+                    .send()
+                    .with_context(|| format!("调用 provider 失败：{base}（服务起来了吗？）"))?;
+                if !resp.status().is_success() {
+                    bail!("provider 返回错误：{}", resp.text().unwrap_or_default());
+                }
+                let v: serde_json::Value = resp.json().context("解析 provider 响应失败")?;
+                let title = v["title"].as_str().unwrap_or_default().to_string();
+                let content = v["content"].as_str().unwrap_or_default();
+                let body = crate::htmlmd::html_to_markdown(content);
+                let markdown = format!("---\ntitle: {title}\n---\n\n{body}");
+                let out = output.unwrap_or_else(|| PathBuf::from(format!("{article_id}.md")));
+                std::fs::write(&out, &markdown)
+                    .with_context(|| format!("写入失败：{}", out.display()))?;
+                println!("已写入 {}", out.display());
+                println!("标题：{title}");
+                if let Some(d) = v["digest"].as_str().filter(|s| !s.is_empty()) {
+                    println!("摘要：{d}");
+                }
+                if let Some(t) = v["thumb_url"].as_str().filter(|s| !s.is_empty()) {
+                    println!("封面 URL：{t}");
+                }
+                if let Some(t) = v["thumb_media_id"].as_str().filter(|s| !s.is_empty()) {
+                    println!("封面 media_id：{t}（publish --thumb 直接用）");
+                }
+                if let Some(u) = v["url"].as_str().filter(|s| !s.is_empty()) {
+                    println!("原文：{u}");
+                }
+                println!(
+                    "改完后 publish 可直接用此文件（标题走 YAML front matter）。\n注意：文中图片仍是原文链接，如需入库需重传。"
+                );
+                Ok(())
+            }
+        },
         Cmd::Skills { cmd } => match cmd {
             SkillsCmd::List => {
                 for skill in embedded_skills() {
@@ -310,12 +454,8 @@ fn publish_remote(
 ) -> Result<()> {
     use base64::Engine as _;
 
-    let account = account
-        .context("--remote 需要 --account <provider 侧账号名>（先把账号 PUT 给 provider）")?;
-    let base = provider
-        .map(str::to_owned)
-        .or_else(|| std::env::var("QTCLOUD_MEDIA_PROVIDER").ok())
-        .unwrap_or_else(|| "http://127.0.0.1:8787".to_string());
+    let account = resolve_account(account)?;
+    let base = provider_base(provider);
     let markdown = std::fs::read_to_string(input.path())
         .with_context(|| format!("读取正文失败：{}", input.path().display()))?;
 
@@ -417,6 +557,21 @@ pub fn inline_local_images(html: &str, markdown: &Path, wechat: &Wechat) -> Resu
 
 fn env_var(name: &str) -> Result<String> {
     std::env::var(name).with_context(|| format!("缺少环境变量 {name}"))
+}
+
+/// provider 地址：--provider > 环境变量 > 缺省本机。
+fn provider_base(provider: Option<&str>) -> String {
+    provider
+        .map(str::to_owned)
+        .or_else(|| std::env::var("QTCLOUD_MEDIA_PROVIDER").ok())
+        .unwrap_or_else(|| "http://127.0.0.1:8787".to_string())
+}
+
+/// provider 侧托管的账号名。
+fn resolve_account(account: Option<&str>) -> Result<String> {
+    account
+        .map(str::to_owned)
+        .context("需要 --account <provider 侧账号名>（先把账号 PUT 给 provider）")
 }
 #[cfg(test)]
 mod tests {

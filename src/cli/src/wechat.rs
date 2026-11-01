@@ -189,6 +189,226 @@ impl Wechat {
         check_api_error(&body)?;
         Ok(media_id.to_string())
     }
+
+    /// 获取成功发布列表（历史文章，正文不返回）。
+    pub fn freepublish_list(&self, offset: u32, count: u32) -> Result<(Vec<PubArticle>, u64)> {
+        let req = serde_json::json!({ "offset": offset, "count": count, "no_content": 1 });
+        let url = format!(
+            "{API}/cgi-bin/freepublish/batchget?access_token={}",
+            self.token
+        );
+        let body = self
+            .client
+            .post(&url)
+            .json(&req)
+            .send()
+            .context("获取发布列表失败（网络错误）")?
+            .text()
+            .context("读取发布列表响应失败")?;
+        check_api_error(&body)?;
+        let resp: BatchResp = serde_json::from_str(&body).context("解析发布列表响应失败")?;
+        let items = resp
+            .item
+            .into_iter()
+            .filter_map(|it| {
+                let news = it.content?.news_item.into_iter().next()?;
+                Some(PubArticle {
+                    article_id: it.article_id,
+                    publish_time: it.publish_time.unwrap_or_default(),
+                    title: news.title,
+                    digest: news.digest,
+                    author: news.author,
+                    content: news.content,
+                    thumb_media_id: news.thumb_media_id,
+                    thumb_url: news.thumb_url,
+                    url: news.url,
+                })
+            })
+            .collect();
+        Ok((items, resp.total_count))
+    }
+
+    /// 获取一篇已发布文章的详情（含正文 HTML）。
+    pub fn freepublish_get(&self, article_id: &str) -> Result<PubArticle> {
+        let req = serde_json::json!({ "article_id": article_id });
+        let url = format!("{API}/cgi-bin/freepublish/get?access_token={}", self.token);
+        let body = self
+            .client
+            .post(&url)
+            .json(&req)
+            .send()
+            .context("获取文章详情失败（网络错误）")?
+            .text()
+            .context("读取文章详情响应失败")?;
+        check_api_error(&body)?;
+        let resp: GetResp = serde_json::from_str(&body).context("解析文章详情响应失败")?;
+        let news = resp
+            .content
+            .and_then(|c| c.news_item.into_iter().next())
+            .context("文章详情响应缺少正文 news_item")?;
+        Ok(PubArticle {
+            article_id: article_id.to_string(),
+            publish_time: resp.publish_time.unwrap_or_default(),
+            title: news.title,
+            digest: news.digest,
+            author: news.author,
+            content: news.content,
+            thumb_media_id: news.thumb_media_id,
+            thumb_url: news.thumb_url,
+            url: news.url,
+        })
+    }
+
+    /// 草稿箱列表（历史文章的草稿正本通道；发布过的文章正本仍在草稿箱）。
+    pub fn draft_list(&self, offset: u32, count: u32) -> Result<(Vec<PubArticle>, u64)> {
+        let req = serde_json::json!({ "offset": offset, "count": count, "no_content": 1 });
+        let url = format!("{API}/cgi-bin/draft/batchget?access_token={}", self.token);
+        let body = self
+            .client
+            .post(&url)
+            .json(&req)
+            .send()
+            .context("获取草稿箱列表失败（网络错误）")?
+            .text()
+            .context("读取草稿箱列表响应失败")?;
+        check_api_error(&body)?;
+        let resp: BatchResp = serde_json::from_str(&body).context("解析草稿箱列表响应失败")?;
+        let items = resp
+            .item
+            .into_iter()
+            .filter_map(|it| {
+                let news = it.content?.news_item.into_iter().next()?;
+                Some(PubArticle {
+                    article_id: it.media_id,
+                    publish_time: it.update_time.or(it.publish_time).unwrap_or_default(),
+                    title: news.title,
+                    digest: news.digest,
+                    author: news.author,
+                    content: news.content,
+                    thumb_media_id: news.thumb_media_id,
+                    thumb_url: news.thumb_url,
+                    url: news.url,
+                })
+            })
+            .collect();
+        Ok((items, resp.total_count))
+    }
+
+    /// 草稿箱取一篇（含正文 HTML）。
+    pub fn draft_get(&self, media_id: &str) -> Result<PubArticle> {
+        let req = serde_json::json!({ "media_id": media_id });
+        let url = format!("{API}/cgi-bin/draft/get?access_token={}", self.token);
+        let body = self
+            .client
+            .post(&url)
+            .json(&req)
+            .send()
+            .context("获取草稿详情失败（网络错误）")?
+            .text()
+            .context("读取草稿详情响应失败")?;
+        check_api_error(&body)?;
+        let resp: DraftGetResp = serde_json::from_str(&body).context("解析草稿详情响应失败")?;
+        // draft/get 的 news_item 在顶层（draft/batchget 才包在 content 里）
+        let news = resp
+            .news_item
+            .into_iter()
+            .next()
+            .or_else(|| resp.content.and_then(|c| c.news_item.into_iter().next()))
+            .context("草稿详情响应缺少 news_item")?;
+        Ok(PubArticle {
+            article_id: media_id.to_string(),
+            publish_time: resp.update_time.unwrap_or_default(),
+            title: news.title,
+            digest: news.digest,
+            author: news.author,
+            content: news.content,
+            thumb_media_id: news.thumb_media_id,
+            thumb_url: news.thumb_url,
+            url: news.url,
+        })
+    }
+}
+
+/// 一篇历史文章（article_id：发布通道为 article_id，草稿通道为 media_id）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PubArticle {
+    pub article_id: String,
+    pub title: String,
+    pub digest: String,
+    pub author: String,
+    /// 正文 HTML；列表接口（no_content=1）时为空
+    pub content: String,
+    #[serde(default)]
+    pub thumb_media_id: String,
+    pub thumb_url: String,
+    /// 公众号文章页 URL
+    pub url: String,
+    #[serde(default)]
+    pub publish_time: u64,
+}
+
+#[derive(Deserialize)]
+struct NewsItem {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    digest: String,
+    #[serde(default)]
+    author: String,
+    #[serde(default)]
+    content: String,
+    #[serde(default)]
+    thumb_media_id: String,
+    #[serde(default)]
+    thumb_url: String,
+    #[serde(default)]
+    url: String,
+}
+
+#[derive(Deserialize)]
+struct ContentWrap {
+    #[serde(default)]
+    news_item: Vec<NewsItem>,
+}
+
+#[derive(Deserialize)]
+struct BatchItem {
+    #[serde(default)]
+    article_id: String,
+    #[serde(default)]
+    media_id: String,
+    #[serde(default)]
+    content: Option<ContentWrap>,
+    #[serde(default)]
+    publish_time: Option<u64>,
+    #[serde(default)]
+    update_time: Option<u64>,
+}
+
+#[derive(Deserialize, Default)]
+struct BatchResp {
+    #[serde(default)]
+    total_count: u64,
+    #[serde(default)]
+    item: Vec<BatchItem>,
+}
+
+#[derive(Deserialize)]
+struct GetResp {
+    #[serde(default)]
+    content: Option<ContentWrap>,
+    #[serde(default)]
+    publish_time: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct DraftGetResp {
+    #[serde(default)]
+    news_item: Vec<NewsItem>,
+    #[serde(default)]
+    content: Option<ContentWrap>,
+    #[serde(default)]
+    update_time: Option<u64>,
 }
 
 enum DraftError {

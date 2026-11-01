@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### 新增
+
+- 标题规则三则（与 studio 统一）：YAML front matter `title:` 优先 → 无 YAML 且唯一 H1 当标题（不进正文）→ 多 H1 都留正文；`render` 内置 `split_title`，`publish --title` 可缺省（按规则从正文解析）
+- `history list / history get`：经 provider 取公众号历史文章（缺省草稿箱通道，`--source publish` 走发布能力）；get 产出带 YAML front matter 的 Markdown，可直接改完 publish
+- `htmlmd` 模块：公众号文章 HTML → Markdown（内联样式拍平、data-src 图片、卡片降级占位、实体解码）
+
 ## [0.1.4] - 2026-10-31
 
 ### 新增

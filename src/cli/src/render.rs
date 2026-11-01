@@ -3,16 +3,60 @@
 //! 全程逐元素内联样式，不使用 `<style>` 块与 class——微信草稿箱会清洗
 //! 样式块与选择器，内联是唯一稳定通道（WeMD 走剪贴板 + DOM 规范化路线，
 //! 依赖浏览器环境，与 API 通道不通用；此处只取其「适配微信清洗」的目标）。
+//!
+//! 标题规则（与 studio md.dart 同源）：
+//!
+//! 1. YAML front matter 的 `title:` 优先于正文 `#`
+//! 2. 无 YAML 标题且正文恰好一个 H1 → 该 H1 是标题，不进正文
+//! 3. 多个 H1 → 都不是标题，都留正文
+//!
+//! front matter 本身是配置，永远不进正文。
 
 use crate::theme::Theme;
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
+/// 拆标题与正文。返回 (标题, 正文)；无标题时为 None。
+pub fn split_title(markdown: &str) -> (Option<String>, String) {
+    let normalized = markdown.replace("\r\n", "\n");
+    let mut lines: Vec<&str> = normalized.split('\n').collect();
+
+    let mut yaml_title = None;
+    if lines.first().is_some_and(|l| l.trim() == "---")
+        && let Some(end) = lines.iter().skip(1).position(|l| l.trim() == "---")
+    {
+        let end = end + 1;
+        for l in &lines[1..end] {
+            let l = l.trim();
+            if let Some(v) = l.strip_prefix("title:") {
+                yaml_title = Some(v.trim().trim_matches(['\'', '"']).to_string());
+                break;
+            }
+        }
+        lines.drain(..=end);
+    }
+
+    let h1: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(i, l)| l.starts_with("# ").then_some(i))
+        .collect();
+    let mut title = yaml_title;
+    if title.is_none()
+        && let [only] = h1.as_slice()
+    {
+        title = Some(lines[*only].trim_start_matches("# ").trim().to_string());
+        lines.remove(*only);
+    }
+    (title, lines.join("\n"))
+}
+
 pub fn render(markdown: &str, theme: &Theme) -> String {
+    let (_, body) = split_title(markdown);
     let mut opts = Options::empty();
     opts.insert(Options::ENABLE_TABLES);
     opts.insert(Options::ENABLE_STRIKETHROUGH);
     opts.insert(Options::ENABLE_TASKLISTS);
-    let parser = Parser::new_ext(markdown, opts);
+    let parser = Parser::new_ext(&body, opts);
 
     let mut w = Writer {
         theme,
@@ -20,8 +64,6 @@ pub fn render(markdown: &str, theme: &Theme) -> String {
         quote_depth: 0,
         in_thead: false,
         in_image_alt: false,
-        started: false,
-        skip_h1: false,
     };
     for ev in parser {
         w.event(ev);
@@ -36,19 +78,10 @@ struct Writer<'a> {
     quote_depth: u32,
     in_thead: bool,
     in_image_alt: bool,
-    started: bool,
-    skip_h1: bool,
 }
 
 impl Writer<'_> {
     fn event(&mut self, ev: Event<'_>) {
-        // 开头的 H1 是文章标题，标题由草稿 title 字段承载，不进正文
-        if self.skip_h1 {
-            if matches!(ev, Event::End(TagEnd::Heading(_))) {
-                self.skip_h1 = false;
-            }
-            return;
-        }
         match ev {
             Event::Start(tag) => self.start(tag),
             Event::End(tag) => self.end(tag),
@@ -83,16 +116,6 @@ impl Writer<'_> {
     }
 
     fn start(&mut self, tag: Tag<'_>) {
-        if let Tag::Heading {
-            level: HeadingLevel::H1,
-            ..
-        } = tag
-            && !self.started
-        {
-            self.skip_h1 = true;
-            return;
-        }
-        self.started = true;
         match tag {
             Tag::Paragraph => {
                 let style = if self.quote_depth > 0 {
@@ -360,11 +383,34 @@ mod tests {
     }
 
     #[test]
-    fn skips_leading_h1_but_keeps_later_ones() {
-        let md = "# 标题\n\n正文。\n\n# 文中一级标题\n\n后面。\n";
+    fn title_rule_yaml_front_matter_wins() {
+        let md = "---\ntitle: YAML 标题\n---\n\n正文。\n\n# 文中一级标题\n";
+        let (title, body) = split_title(md);
+        assert_eq!(title.as_deref(), Some("YAML 标题"));
+        assert!(body.contains("# 文中一级标题"), "正文 H1 保留正文地位");
+        assert!(!body.contains("title:"), "front matter 不进正文");
         let html = render(md, &Theme::default());
-        assert!(!html.contains(">标题<"), "开头 H1 应被跳过");
         assert!(html.contains("正文。"));
-        assert!(html.contains("文中一级标题"), "文中 H1 应保留");
+    }
+
+    #[test]
+    fn title_rule_single_h1_is_title() {
+        let md = "# 文章标题\n\n正文。\n";
+        let (title, body) = split_title(md);
+        assert_eq!(title.as_deref(), Some("文章标题"));
+        assert!(!body.contains("文章标题"), "标题不进正文");
+        let html = render(md, &Theme::default());
+        assert!(!html.contains(">文章标题<"));
+        assert!(html.contains("正文。"));
+    }
+
+    #[test]
+    fn title_rule_multiple_h1_all_body() {
+        let md = "# 一\n\n正文。\n\n# 二\n";
+        let (title, body) = split_title(md);
+        assert!(title.is_none());
+        assert!(body.contains("# 一") && body.contains("# 二"));
+        let html = render(md, &Theme::default());
+        assert!(html.contains(">一<") && html.contains(">二<"));
     }
 }
