@@ -74,6 +74,14 @@ enum Cmd {
         #[command(subcommand)]
         cmd: HistoryCmd,
     },
+    /// 文章 → 小红书图集（1080×1440，3:4；封面 + 正文分页 PNG，纯本地生成）
+    Rednote {
+        /// Markdown 文件或草稿名
+        markdown: String,
+        /// 输出目录，缺省：正文旁 `<名称>-rednote/`（草稿在草稿区旁）
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
     /// 技能管理：列出 / 安装内嵌的 agent 技能文件
     Skills {
         #[command(subcommand)]
@@ -248,6 +256,30 @@ pub fn run() -> Result<()> {
                 )?;
                 println!("草稿状态已保存：{}", drafts::meta_path(name).display());
             }
+            Ok(())
+        }
+        Cmd::Rednote { markdown, output } => {
+            let input = drafts::resolve_input(&markdown)?;
+            let text = std::fs::read_to_string(input.path())
+                .with_context(|| format!("读取正文失败：{}", input.path().display()))?;
+            let out = match output {
+                Some(o) => o,
+                None => match &input {
+                    drafts::Input::Draft { name, .. } => {
+                        drafts::drafts_dir().join(format!("{name}-rednote"))
+                    }
+                    drafts::Input::File(p) => {
+                        let dir = p.parent().unwrap_or_else(|| Path::new("."));
+                        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("article");
+                        dir.join(format!("{stem}-rednote"))
+                    }
+                },
+            };
+            let paths = crate::rednote::generate(&text, &out)?;
+            for p in &paths {
+                println!("{}", p.display());
+            }
+            println!("共 {} 页，按序号上传小红书即可。", paths.len());
             Ok(())
         }
         Cmd::History { cmd } => match cmd {

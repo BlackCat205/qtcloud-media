@@ -26,3 +26,5 @@ pulldown-cmark = { version = "0.13", default-features = false, features = ["html
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
 regex = "1"
 agent-skills-rs = "0.3"
+resvg = "0.44"
+tiny-skia = "0.11"

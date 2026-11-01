@@ -12,6 +12,8 @@ import 'md.dart';
 import 'preview.dart'
     if (dart.library.js_interop) 'preview_web.dart'
     if (dart.library.io) 'preview_desktop.dart';
+import 'rednote_launcher.dart'
+    if (dart.library.io) 'rednote_launcher_io.dart';
 import 'remote.dart'
     if (dart.library.js_interop) 'remote_web.dart'
     if (dart.library.io) 'remote_io.dart';
@@ -361,6 +363,24 @@ class _ArticlePageState extends State<ArticlePage> {
     ).showSnackBar(SnackBar(content: Text('已删除草稿「$name」')));
   }
 
+  /// 生成小红书图集：生成逻辑在 CLI（rednote），studio 只做入口。
+  Future<void> _makeRednote() async {
+    final name = _draftName;
+    if (name == null) return;
+    try {
+      final out = await runRednote(name);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('小红书图集已生成：\n$out')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('生成失败：$e')));
+    }
+  }
+
   /// 详情工具带：编辑器上方一条，收所有对「当前这篇」的工具。
   /// 归属原则：动作作用于谁，就住哪一栏——复制/推送作用于当前文章，属详情，不属清单。
   /// 样式要安静：背景比详情区浅一档，按钮次要起步，只有「复制到公众号」一个主按钮。
@@ -371,6 +391,11 @@ class _ArticlePageState extends State<ArticlePage> {
       child: Row(
         children: [
           const Spacer(),
+          IconButton(
+            tooltip: '生成小红书图集',
+            onPressed: _draftName == null ? null : _makeRednote,
+            icon: const Icon(Icons.photo_library_outlined, size: 20),
+          ),
           if (_remote != null) ...[
             OutlinedButton.icon(
               onPressed: _publishRemote,
