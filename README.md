@@ -8,6 +8,7 @@
 |------|------|
 | `src/cli` | 命令行工具（Rust）：Markdown → 公众号排版 → 草稿箱直出 |
 | `src/studio` | 工作台（Flutter），初始化骨架 |
+| `docs/dev-guide` | 工作台交互设计说明（归属原则、工具带规矩） |
 | `examples/rednote` | 小红书图集生成器（模板 → HTML → PNG） |
 
 ## 许可

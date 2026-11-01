@@ -319,24 +319,26 @@ class _ArticlePageState extends State<ArticlePage> {
     );
   }
 
-  /// 交付区：草稿清单底部，唯一的页面级动作；推送仅在配好服务端后出现。
-  Widget _buildFooter() {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+  /// 详情工具带：编辑器上方一条，收所有对「当前这篇」的工具。
+  /// 归属原则：动作作用于谁，就住哪一栏——复制/推送作用于当前文章，属详情，不属清单。
+  /// 样式要安静：背景比详情区浅一档，按钮次要起步，只有「复制到公众号」一个主按钮。
+  Widget _buildDetailToolbar() {
+    return Container(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
         children: [
           if (_remote != null) ...[
             OutlinedButton.icon(
               onPressed: _publishRemote,
-              icon: const Icon(Icons.cloud_upload),
+              icon: const Icon(Icons.cloud_upload, size: 18),
               label: Text('推到公众号（${_remote!.account}）'),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(width: 8),
           ],
           FilledButton.icon(
             onPressed: _copy,
-            icon: const Icon(Icons.copy),
+            icon: const Icon(Icons.copy, size: 18),
             label: const Text('复制到公众号'),
           ),
         ],
@@ -391,8 +393,6 @@ class _ArticlePageState extends State<ArticlePage> {
                     },
                   ),
           ),
-          const Divider(height: 1),
-          _buildFooter(),
         ],
       ),
     );
@@ -414,30 +414,39 @@ class _ArticlePageState extends State<ArticlePage> {
           _buildDraftPanel(),
           const VerticalDivider(width: 1),
           Expanded(
-            child: Row(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _buildDetailToolbar(),
+                const Divider(height: 1),
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: TextField(
-                      controller: _controller,
-                      maxLines: null,
-                      expands: true,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        labelText: 'Markdown',
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: TextField(
+                            controller: _controller,
+                            maxLines: null,
+                            expands: true,
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              labelText: 'Markdown',
+                            ),
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
                       ),
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 14,
+                      const VerticalDivider(width: 1),
+                      Expanded(
+                        child: ClipRect(child: buildPreview(_blocks, _theme)),
                       ),
-                    ),
+                    ],
                   ),
-                ),
-                const VerticalDivider(width: 1),
-                Expanded(
-                  child: ClipRect(child: buildPreview(_blocks, _theme)),
                 ),
               ],
             ),
