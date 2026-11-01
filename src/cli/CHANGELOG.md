@@ -2,9 +2,17 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-01
+
 ### 新增
 
-- `rednote` 命令：文章 → 小红书图集（1080×1440，3:4）——确定性分页，封面+正文页，SVG+resvg 纯本地渲染（无浏览器无 LLM）；正文配图就近抓取嵌入，抓不到渲染占位；输出到正文旁 `<名称>-rednote/`
+- 命令树按「管理单位 × 动作」重组：`article`（render/push/pull/draft）、`note export`（原 rednote）、`config set|show`（连接配一次各命令共用，flag > 环境变量 > 配置文件）、`skills`
+- `article draft delete`：删除草稿（正文与 meta 一并清理），与 studio 能力对齐
+- `note export`：文章 → 小红书图集（1080×1440，3:4）——确定性分页，封面+正文页，SVG+resvg 纯本地渲染（无浏览器无 LLM）；正文配图就近抓取嵌入，抓不到渲染占位；输出到正文旁 `<名称>-rednote/`
+
+### 变更（破坏性）
+
+- 旧命令替换：`render`→`article render`、`publish`→`article push`（新增 `--platform`，目前仅 wechat）、`history`→`article pull`、`rednote`→`note export`、`draft`→`article draft`；不留别名，`--account/--provider` 降为可覆盖项（缺省走 `config`）
 
 ## [0.1.5] - 2026-11-01
 

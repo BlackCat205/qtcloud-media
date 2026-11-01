@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod config;
 pub mod drafts;
 pub mod htmlmd;
 pub mod paths;

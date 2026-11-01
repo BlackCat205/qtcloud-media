@@ -6,7 +6,7 @@ import 'dart:io';
 
 Future<String> runRednote(String draftName) async {
   final bin = await _findBin();
-  final result = await Process.run(bin, ['rednote', draftName]);
+  final result = await Process.run(bin, ['note', 'export', draftName]);
   if (result.exitCode != 0) {
     final err = (result.stderr as String).trim();
     throw Exception(err.isEmpty ? 'qtcloud-media rednote 退出码 ${result.exitCode}' : err);

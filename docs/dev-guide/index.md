@@ -40,23 +40,33 @@
 
 配套行为：front matter 本身是配置永远不进正文；预览把解析出的标题渲染在顶部；推送用标题做 title 参数，没标题拦下提示先定标题；「存为新草稿」默认拿标题当草稿名。
 
-已统一：CLI（`render.rs` 的 `split_title`）与 studio（`md.dart` 的 `parseArticle`）是同一条判据，provider 复用 CLI 引擎自然同源；CLI `publish --title` 可缺省（按规则从正文解析，解析不出才报错）。
+已统一：CLI（`render.rs` 的 `split_title`）与 studio（`md.dart` 的 `parseArticle`）是同一条判据，provider 复用 CLI 引擎自然同源；CLI `article push --title` 可缺省（按规则从正文解析，解析不出才报错）。
+
+## 命令结构（CLI）
+
+管理单位 × 动作：单位是名词，动作是动词，格式与平台是动作的参数——**导出某种格式，或连接某个具体平台**。
+
+- `article`（文章）：`render`（导出 html）、`push --platform wechat`（连接平台，原 publish）、`pull list|get`（从平台取回，原 history）、`draft list|new|show|delete`（工作区）
+- `note`（图文）：`export`（导出 png 图集，原 rednote）
+- `config`：`set account|provider`、`show`——连接配一次各命令共用（优先级：flag > 环境变量 > 配置文件）
+- `skills`：技能管理
+- 平台轴目前只接 wechat，格式轴只接 html/png——轴已留好，未来平台（如 xiaohongshu）与新格式在对应动词下扩展
 
 ## 历史文章
 
-CLI `history` 命令，经 provider 取公众号历史文章：
+CLI `article pull`（原 history），经 provider 取公众号文章：
 
-- `qtcloud-media history list --account <名>`：列出历史文章（时间、标题、id）
-- `qtcloud-media history get <id> --account <名> -o xx.md`：取回一篇转成 Markdown，标题写入 YAML front matter——改完直接 publish，标题规则第 1 条天然生效
+- `qtcloud-media article pull list`：列出文章（时间、标题、id）——账号先 `config set account <名>` 配一次，不再每次带 `--account`
+- `qtcloud-media article pull get <id> -o xx.md`：取回一篇转成 Markdown，标题写入 YAML front matter——改完直接 push，标题规则第 1 条天然生效
 - 双通道：`--source draft`（缺省）走草稿箱——发布过的文章正本都留在草稿箱；`--source publish` 走发布能力（freepublish），需账号有该权限，未授权报 48001
 - provider 侧：GET /articles、GET /articles/{id}（query：account、source）
-- 注意：取回的文中图片仍是原文链接，重新发布前需重传（`history get` 会提示）
+- 注意：取回的文中图片仍是原文链接，重新发布前需重传（`pull get` 会提示）
 
 ## 小红书图集
 
 文章的图集出口，与公众号推送同源（同一份 Markdown）：
 
-- **CLI 单源**：`qtcloud-media rednote <文件|草稿名> [-o 目录]`——确定性分页（无浏览器、无 LLM）：Markdown → 块 → 分页 → SVG → resvg 渲染 PNG；输出到正文旁 `<名称>-rednote/`
+- **CLI 单源**：`qtcloud-media note export <文件|草稿名> [-o 目录]`（原 rednote）——确定性分页（无浏览器、无 LLM）：Markdown → 块 → 分页 → SVG → resvg 渲染 PNG；输出到正文旁 `<名称>-rednote/`
 - **studio 只做入口**：详情工具带「生成小红书图集」按钮（需先保存草稿），内部调本机 CLI；生成逻辑不在 studio 重写第二份
 - **版式**：1080×1440（3:4），左右边距 90，正文 34/行距 1.65，小节标题 46（品牌绿），封面＝品牌条+品牌名+大标题，页脚＝品牌+页码 N/M；字体用系统中文字体（WenQuanYi）
 - **配图**：正文图片就近抓取嵌入（10s 超时），抓不到渲染占位块「配图见原文」
