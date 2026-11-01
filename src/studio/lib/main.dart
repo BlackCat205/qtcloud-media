@@ -330,6 +330,37 @@ class _ArticlePageState extends State<ArticlePage> {
     );
   }
 
+  Future<void> _deleteDraft(String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除草稿'),
+        content: Text('确认删除「$name」？正文与草稿箱接力状态一并删除，不可恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await deleteDraft(name);
+    if (!mounted) return;
+    if (_draftName == name) {
+      setState(() => _draftName = null);
+    }
+    await _refreshDrafts();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('已删除草稿「$name」')));
+  }
+
   /// 详情工具带：编辑器上方一条，收所有对「当前这篇」的工具。
   /// 归属原则：动作作用于谁，就住哪一栏——复制/推送作用于当前文章，属详情，不属清单。
   /// 样式要安静：背景比详情区浅一档，按钮次要起步，只有「复制到公众号」一个主按钮。
@@ -401,6 +432,13 @@ class _ArticlePageState extends State<ArticlePage> {
                         dense: true,
                         selected: n == _draftName,
                         title: Text(n, overflow: TextOverflow.ellipsis),
+                        trailing: IconButton(
+                          tooltip: '删除草稿',
+                          visualDensity: VisualDensity.compact,
+                          iconSize: 18,
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => _deleteDraft(n),
+                        ),
                         onTap: () => _openDraft(n),
                       );
                     },

@@ -1,6 +1,7 @@
 /// 草稿读写（桌面端）。与 CLI（Rust drafts.rs）共用同一目录：
 /// `$XDG_STATE_HOME/qtcloud-media/drafts/<name>.md`。
-/// meta（title/media_id 等）由 CLI 的 publish 维护，studio 只读不动。
+/// meta（title/media_id 等）由 CLI 的 publish 维护，studio 只读不改；
+/// 删除草稿时一并清掉 meta，不留孤儿文件。
 library;
 
 import 'dart:io';
@@ -37,3 +38,12 @@ Future<void> saveDraftIn(Directory dir, String name, String content) async {
 
 Future<void> saveDraft(String name, String content) =>
     saveDraftIn(draftsDir(), name, content);
+
+Future<void> deleteDraftIn(Directory dir, String name) async {
+  final md = File('${dir.path}/$name.md');
+  if (await md.exists()) await md.delete();
+  final meta = File('${dir.path}/$name.meta.json');
+  if (await meta.exists()) await meta.delete();
+}
+
+Future<void> deleteDraft(String name) => deleteDraftIn(draftsDir(), name);
