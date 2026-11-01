@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-11-01
+
 ### 新增
 
 - 标题规则三则（与 studio 统一）：YAML front matter `title:` 优先 → 无 YAML 且唯一 H1 当标题（不进正文）→ 多 H1 都留正文；`render` 内置 `split_title`，`publish --title` 可缺省（按规则从正文解析）
