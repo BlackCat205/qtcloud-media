@@ -319,6 +319,31 @@ class _ArticlePageState extends State<ArticlePage> {
     );
   }
 
+  /// 交付区：草稿清单底部，唯一的页面级动作；推送仅在配好服务端后出现。
+  Widget _buildFooter() {
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_remote != null) ...[
+            OutlinedButton.icon(
+              onPressed: _publishRemote,
+              icon: const Icon(Icons.cloud_upload),
+              label: Text('推到公众号（${_remote!.account}）'),
+            ),
+            const SizedBox(height: 8),
+          ],
+          FilledButton.icon(
+            onPressed: _copy,
+            icon: const Icon(Icons.copy),
+            label: const Text('复制到公众号'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 草稿清单面板：导航栏与编辑器之间，点项打开、＋存为新草稿、保存写回当前草稿。
   Widget _buildDraftPanel() {
     return Container(
@@ -366,6 +391,8 @@ class _ArticlePageState extends State<ArticlePage> {
                     },
                   ),
           ),
+          const Divider(height: 1),
+          _buildFooter(),
         ],
       ),
     );
@@ -387,57 +414,30 @@ class _ArticlePageState extends State<ArticlePage> {
           _buildDraftPanel(),
           const VerticalDivider(width: 1),
           Expanded(
-            child: Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                AppBar(
-                  title: Text(
-                    _draftName == null ? '量潮媒体云' : '量潮媒体云 · $_draftName',
-                  ),
-                  actions: [
-                    if (_remote != null)
-                      IconButton(
-                        tooltip: '推到公众号（远程：${_remote!.account}）',
-                        onPressed: _publishRemote,
-                        icon: const Icon(Icons.cloud_upload),
-                      ),
-                    const SizedBox(width: 4),
-                    FilledButton.icon(
-                      onPressed: _copy,
-                      icon: const Icon(Icons.copy),
-                      label: const Text('复制到公众号'),
-                    ),
-                    const SizedBox(width: 16),
-                  ],
-                ),
                 Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: TextField(
-                            controller: _controller,
-                            maxLines: null,
-                            expands: true,
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              labelText: 'Markdown',
-                            ),
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: TextField(
+                      controller: _controller,
+                      maxLines: null,
+                      expands: true,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Markdown',
                       ),
-                      const VerticalDivider(width: 1),
-                      Expanded(
-                        child: ClipRect(child: buildPreview(_blocks, _theme)),
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 14,
                       ),
-                    ],
+                    ),
                   ),
+                ),
+                const VerticalDivider(width: 1),
+                Expanded(
+                  child: ClipRect(child: buildPreview(_blocks, _theme)),
                 ),
               ],
             ),
