@@ -50,7 +50,7 @@ class StudioApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '量潮媒体云工作台',
+      title: '量潮媒体云',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF07C160)),
         useMaterial3: true,
@@ -283,7 +283,7 @@ class _StudioPageState extends State<StudioPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_draftName == null ? '量潮媒体云工作台' : '量潮媒体云工作台 · $_draftName'),
+        title: Text(_draftName == null ? '量潮媒体云' : '量潮媒体云 · $_draftName'),
         actions: [
           PopupMenuButton<String>(
             tooltip: '打开草稿',
