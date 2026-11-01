@@ -381,53 +381,64 @@ class _ArticlePageState extends State<ArticlePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_draftName == null ? '量潮媒体云' : '量潮媒体云 · $_draftName'),
-        actions: [
-          if (_remote != null)
-            IconButton(
-              tooltip: '推到公众号（远程：${_remote!.account}）',
-              onPressed: _publishRemote,
-              icon: const Icon(Icons.cloud_upload),
-            ),
-          const SizedBox(width: 4),
-          FilledButton.icon(
-            onPressed: _copy,
-            icon: const Icon(Icons.copy),
-            label: const Text('复制到公众号'),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildDraftPanel(),
           const VerticalDivider(width: 1),
           Expanded(
-            child: Row(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: TextField(
-                      controller: _controller,
-                      maxLines: null,
-                      expands: true,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        labelText: 'Markdown',
+                AppBar(
+                  title: Text(
+                    _draftName == null ? '量潮媒体云' : '量潮媒体云 · $_draftName',
+                  ),
+                  actions: [
+                    if (_remote != null)
+                      IconButton(
+                        tooltip: '推到公众号（远程：${_remote!.account}）',
+                        onPressed: _publishRemote,
+                        icon: const Icon(Icons.cloud_upload),
                       ),
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 14,
-                      ),
+                    const SizedBox(width: 4),
+                    FilledButton.icon(
+                      onPressed: _copy,
+                      icon: const Icon(Icons.copy),
+                      label: const Text('复制到公众号'),
                     ),
+                    const SizedBox(width: 16),
+                  ],
+                ),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: TextField(
+                            controller: _controller,
+                            maxLines: null,
+                            expands: true,
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              labelText: 'Markdown',
+                            ),
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const VerticalDivider(width: 1),
+                      Expanded(
+                        child: ClipRect(child: buildPreview(_blocks, _theme)),
+                      ),
+                    ],
                   ),
                 ),
-                const VerticalDivider(width: 1),
-                Expanded(child: ClipRect(child: buildPreview(_blocks, _theme))),
               ],
             ),
           ),
