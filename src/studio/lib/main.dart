@@ -71,7 +71,17 @@ class StudioShell extends StatefulWidget {
 
 class _StudioShellState extends State<StudioShell> {
   int _index = 0;
+  bool _settings = false;
   final _articleKey = GlobalKey<_ArticlePageState>();
+
+  void _select(int i) {
+    setState(() {
+      _index = i;
+      _settings = false;
+    });
+    // 从设置页切回文章页时重读服务端连接设置，保证推送用最新值
+    if (i == 0) _articleKey.currentState?.reloadRemote();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,12 +90,8 @@ class _StudioShellState extends State<StudioShell> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           NavigationRail(
-            selectedIndex: _index,
-            onDestinationSelected: (i) {
-              setState(() => _index = i);
-              // 从设置页切回文章页时重读服务端连接设置，保证推送用最新值
-              if (i == 0) _articleKey.currentState?.reloadRemote();
-            },
+            selectedIndex: _settings ? null : _index,
+            onDestinationSelected: _select,
             labelType: NavigationRailLabelType.all,
             destinations: const [
               NavigationRailDestination(
@@ -100,16 +106,30 @@ class _StudioShellState extends State<StudioShell> {
                 icon: Icon(Icons.videocam_outlined),
                 label: Text('视频'),
               ),
-              NavigationRailDestination(
-                icon: Icon(Icons.settings_outlined),
-                label: Text('设置'),
-              ),
             ],
+            trailing: Expanded(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: IconButton(
+                    tooltip: '设置',
+                    onPressed: () => setState(() => _settings = true),
+                    icon: Icon(
+                      Icons.settings_outlined,
+                      color: _settings
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
           const VerticalDivider(width: 1),
           Expanded(
             child: IndexedStack(
-              index: _index,
+              index: _settings ? 3 : _index,
               children: [
                 ArticlePage(key: _articleKey),
                 const PlaceholderPage(title: '图文'),
@@ -253,38 +273,101 @@ class _ArticlePageState extends State<ArticlePage> {
     });
   }
 
-  Future<void> _saveDraft() async {
-    var name = _draftName;
-    if (name == null) {
-      final controller = TextEditingController();
-      name = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('保存为草稿'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: '草稿名'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, controller.text.trim()),
-              child: const Text('保存'),
-            ),
-          ],
+  Future<void> _saveDraftAs() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('保存为草稿'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: '草稿名'),
         ),
-      );
-      if (name == null || name.isEmpty || !mounted) return;
-    }
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty || !mounted) return;
     await saveDraft(name, _controller.text);
     if (!mounted) return;
     setState(() => _draftName = name);
+    await _refreshDrafts();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('已保存草稿「$name」。CLI 用草稿名 publish 即可接力。')),
+    );
+  }
+
+  Future<void> _saveCurrentDraft() async {
+    final name = _draftName;
+    if (name == null) return;
+    await saveDraft(name, _controller.text);
+    if (!mounted) return;
+    await _refreshDrafts();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已保存草稿「$name」。CLI 用草稿名 publish 即可接力。')),
+    );
+  }
+
+  /// 草稿清单面板：导航栏与编辑器之间，点项打开、＋存为新草稿、保存写回当前草稿。
+  Widget _buildDraftPanel() {
+    return Container(
+      width: 240,
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              children: [
+                const SizedBox(width: 8),
+                Text('草稿', style: Theme.of(context).textTheme.titleSmall),
+                const Spacer(),
+                IconButton(
+                  tooltip: '保存为新草稿',
+                  onPressed: _saveDraftAs,
+                  icon: const Icon(Icons.add),
+                  visualDensity: VisualDensity.compact,
+                ),
+                IconButton(
+                  tooltip: '保存当前草稿',
+                  onPressed: _draftName == null ? null : _saveCurrentDraft,
+                  icon: const Icon(Icons.save),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _draftNames.isEmpty
+                ? const Center(child: Text('（暂无草稿）'))
+                : ListView.builder(
+                    itemCount: _draftNames.length,
+                    itemBuilder: (context, i) {
+                      final n = _draftNames[i];
+                      return ListTile(
+                        dense: true,
+                        selected: n == _draftName,
+                        title: Text(n, overflow: TextOverflow.ellipsis),
+                        onTap: () => _openDraft(n),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -301,27 +384,6 @@ class _ArticlePageState extends State<ArticlePage> {
       appBar: AppBar(
         title: Text(_draftName == null ? '量潮媒体云' : '量潮媒体云 · $_draftName'),
         actions: [
-          PopupMenuButton<String>(
-            tooltip: '打开草稿',
-            icon: const Icon(Icons.folder_open),
-            onSelected: _openDraft,
-            onOpened: _refreshDrafts,
-            itemBuilder: (context) => _draftNames.isEmpty
-                ? const [
-                    PopupMenuItem<String>(
-                      enabled: false,
-                      child: Text('（暂无草稿）'),
-                    ),
-                  ]
-                : _draftNames
-                      .map((n) => PopupMenuItem(value: n, child: Text(n)))
-                      .toList(),
-          ),
-          IconButton(
-            tooltip: '保存草稿',
-            onPressed: _saveDraft,
-            icon: const Icon(Icons.save),
-          ),
           if (_remote != null)
             IconButton(
               tooltip: '推到公众号（远程：${_remote!.account}）',
@@ -340,23 +402,35 @@ class _ArticlePageState extends State<ArticlePage> {
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _buildDraftPanel(),
+          const VerticalDivider(width: 1),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: TextField(
-                controller: _controller,
-                maxLines: null,
-                expands: true,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: 'Markdown',
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: TextField(
+                      controller: _controller,
+                      maxLines: null,
+                      expands: true,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Markdown',
+                      ),
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
                 ),
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-              ),
+                const VerticalDivider(width: 1),
+                Expanded(child: ClipRect(child: buildPreview(_blocks, _theme))),
+              ],
             ),
           ),
-          const VerticalDivider(width: 1),
-          Expanded(child: ClipRect(child: buildPreview(_blocks, _theme))),
         ],
       ),
     );
