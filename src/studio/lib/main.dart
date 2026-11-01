@@ -328,6 +328,7 @@ class _ArticlePageState extends State<ArticlePage> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
+          const Spacer(),
           if (_remote != null) ...[
             OutlinedButton.icon(
               onPressed: _publishRemote,
@@ -341,6 +342,7 @@ class _ArticlePageState extends State<ArticlePage> {
             icon: const Icon(Icons.copy, size: 18),
             label: const Text('复制到公众号'),
           ),
+          const SizedBox(width: 4),
         ],
       ),
     );
