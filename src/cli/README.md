@@ -14,16 +14,16 @@ cargo install --path .
 
 ```bash
 # 只排版：Markdown → 公众号草稿 HTML（不联网）
-qtcloud-media render article.md --theme themes/default.toml -o article.html
+qtcloud-media article render article.md --theme themes/default.toml -o article.html
 
 # 排版 + 推入公众号草稿箱（不群发）
 export QTCLOUD_MEDIA_APP_ID=wx...
 export QTCLOUD_MEDIA_APP_SECRET=...
-qtcloud-media publish article.md --theme themes/default.toml \
+qtcloud-media article push article.md --theme themes/default.toml \
   --title "文章标题" --thumb ./cover.jpg --digest "摘要"
 ```
 
-`publish` 会自动处理三件事：
+`article push` 会自动处理三件事：
 
 1. Markdown 渲染成带主题样式的 HTML 片段
 2. 正文里的本地图片逐张上传（`media/uploadimg`），替换成微信 URL
@@ -33,30 +33,30 @@ qtcloud-media publish article.md --theme themes/default.toml \
 
 ### 草稿接力（CLI ↔ studio）
 
-草稿是 XDG 状态数据，与主题（资产）分开存放：`$XDG_STATE_HOME/qtcloud-media/drafts/`（回退 `~/.local/state/...`）。一个草稿两个文件：`<name>.md`（正文）+ `<name>.meta.json`（title/digest/thumb/theme/media_id，由 publish 维护）。
+草稿是 XDG 状态数据，与主题（资产）分开存放：`$XDG_STATE_HOME/qtcloud-media/drafts/`（回退 `~/.local/state/...`）。一个草稿两个文件：`<name>.md`（正文）+ `<name>.meta.json`（title/digest/thumb/theme/media_id，由 `article push` 维护）。
 
 ```bash
-qtcloud-media draft new 我的文章          # 新建（studio 可直接打开继续写）
-qtcloud-media draft list                 # 名称、是否已推草稿箱、标题
-qtcloud-media draft show 我的文章         # 正文路径与 meta 状态
-qtcloud-media publish 我的文章 --title ... --thumb ...
-# 首次推入草稿箱；再次 publish 同名草稿走 draft/update 更新同一篇，不新建
+qtcloud-media article draft new 我的文章          # 新建（studio 可直接打开继续写）
+qtcloud-media article draft list                 # 名称、是否已推草稿箱、标题
+qtcloud-media article draft show 我的文章         # 正文路径与 meta 状态
+qtcloud-media article push 我的文章 --title ... --thumb ...
+# 首次推入草稿箱；再次推送同名草稿走 draft/update 更新同一篇，不新建
 ```
 
-`render` 的位置参数同样接受草稿名。正式要进 brochure/library 的定稿仍从草稿移入仓库，git 是正本。
+`article render` 的位置参数同样接受草稿名。正式要进 brochure/library 的定稿仍从草稿移入仓库，git 是正本。
 
 ### 远程模式（接 provider）
 
-local（缺省）：本机直连微信。remote：发布交给 provider（账号托管、发布记录在服务端；草稿与主题仍是你本机的 XDG 正本）。
+local（缺省）：本机直连微信。remote：草稿推送交给 provider（账号托管、推送记录在服务端；草稿与主题仍是你本机的 XDG 正本）。
 
 ```bash
 # 先把账号交给 provider（一次性）
 curl -X PUT http://127.0.0.1:8787/accounts/主号 -H 'content-type: application/json' \
   -d '{"app_id":"...","app_secret":"..."}'
 
-qtcloud-media publish 我的文章 --remote --account 主号 --title ... --thumb ...
+qtcloud-media article push 我的文章 --remote --account 主号 --title ... --thumb ...
 # 封面是本地路径时自动转 base64（provider 按魔数嗅探类型）；
-# provider 地址缺省 http://127.0.0.1:8787，可用 --provider 或 QTCLOUD_MEDIA_PROVIDER 覆盖
+# provider 地址缺省 http://127.0.0.1:8787，可通过 --provider、QTCLOUD_MEDIA_PROVIDER 或 config set provider 设置
 ```
 
 ### 技能管理
